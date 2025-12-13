@@ -14,12 +14,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.aitalkdemo.ui.HomeScreen
 import com.example.aitalkdemo.ui.theme.AiTalkDemoTheme
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -42,10 +42,13 @@ class MainActivity : ComponentActivity() {
 
     // MediaRecorder used for microphone capture
     private var recorder: MediaRecorder? = null
+
     // Compose state for whether we are currently recording
     private var isRecording by mutableStateOf(false)
+
     // Compose state for whether a backend call is in progress
     private var isProcessing by mutableStateOf(false)
+
     // Temporary file for the recorded audio
     private lateinit var audioFile: File
 
@@ -75,8 +78,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         // Request mic permission up front
         requestMicPermission()
+
         // Compose UI
         setContent {
             AiTalkDemoTheme {
@@ -108,13 +113,16 @@ class MainActivity : ComponentActivity() {
      */
     private fun startRecording() {
         if (isRecording) return
+
         // Create a temp file in the app's internal files directory
         audioFile = File(filesDir, "recording_${System.currentTimeMillis()}.m4a")
+
         recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(this)
         } else {
             MediaRecorder()
         }
+
         try {
             recorder?.apply {
                 setAudioSource(MediaRecorder.AudioSource.MIC)
@@ -129,10 +137,9 @@ class MainActivity : ComponentActivity() {
             isRecording = true
             Log.d(TAG, "Recording started: ${audioFile.absolutePath}")
         } catch (e: IOException) {
-            Log.e(TAG, "Failed to start recording", e)
-            recorder?.release()
-            recorder = null
-            isRecording = false
+            handleRecordingStartFailure("Failed to start recording", e)
+        } catch (e: Exception) {
+            handleRecordingStartFailure("Unexpected error starting recording", e)
         }
     }
 
@@ -141,18 +148,25 @@ class MainActivity : ComponentActivity() {
      */
     private fun stopRecordingAndSend() {
         if (!isRecording) return
+
         isRecording = false
         try {
             recorder?.stop()
         } catch (e: RuntimeException) {
             // Handle case where stop is called prematurely
             Log.e(TAG, "Error stopping recorder", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error stopping recorder", e)
         } finally {
             recorder?.release()
             recorder = null
         }
-        // Send the recorded audio asynchronously
-        sendToBackend(audioFile)
+
+        if (audioFile.exists()) {
+            sendToBackend(audioFile)
+        } else {
+            Log.w(TAG, "Recording file missing, skipping upload")
+        }
     }
 
     /**
@@ -161,43 +175,45 @@ class MainActivity : ComponentActivity() {
      * played back on the device.
      */
     private fun sendToBackend(file: File) {
-        isProcessing = true
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                Log.d(TAG, "Sending file: ${file.absolutePath}, size=${file.length()} bytes")
-                val body = MultipartBody.Builder()
-                    .setType(MultipartBody.FORM)
-                    .addFormDataPart(
-                        name = "audio",
-                        filename = file.name,
-                        body = file.asRequestBody("audio/mp4".toMediaTypeOrNull())
-                    )
-                    .build()
-                val request = Request.Builder()
-                    .url(backendUrl)
-                    .post(body)
-                    .build()
-                client.newCall(request).execute().use { response ->
-                    Log.d(TAG, "Backend response code: ${response.code}")
-                    if (!response.isSuccessful) {
-                        Log.e(TAG, "Backend error: ${response.code} ${response.message}")
-                    } else {
-                        val responseBytes = response.body?.bytes()
-                        if (responseBytes != null && responseBytes.isNotEmpty()) {
-                            val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
-                            mp3File.writeBytes(responseBytes)
-                            withContext(Dispatchers.Main) {
-                                playAudio(mp3File)
-                            }
-                        } else {
-                            Log.w(TAG, "Empty response body from backend")
-                        }
-                    }
+        withProcessingIo {
+            if (!file.exists()) {
+                Log.e(TAG, "Audio file does not exist: ${file.absolutePath}")
+                return@withProcessingIo
+            }
+
+            Log.d(TAG, "Sending file: ${file.absolutePath}, size=${file.length()} bytes")
+
+            val body = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart(
+                    name = "audio",
+                    filename = file.name,
+                    body = file.asRequestBody("audio/mp4".toMediaTypeOrNull())
+                )
+                .build()
+
+            val request = Request.Builder()
+                .url(backendUrl)
+                .post(body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                Log.d(TAG, "Backend response code: ${response.code}")
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Backend error: ${response.code} ${response.message}")
+                    return@use
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error sending audio to backend", e)
-            } finally {
-                isProcessing = false
+
+                val responseBytes = response.body?.bytes()
+                if (responseBytes != null && responseBytes.isNotEmpty()) {
+                    val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
+                    mp3File.writeBytes(responseBytes)
+                    withContext(Dispatchers.Main) {
+                        playAudio(mp3File)
+                    }
+                } else {
+                    Log.w(TAG, "Empty response body from backend")
+                }
             }
         }
     }
@@ -211,46 +227,53 @@ class MainActivity : ComponentActivity() {
      * @param voice the voice or persona name to use
      */
     private fun sendTextToBackend(prompt: String, voice: String) {
-        isProcessing = true
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val json = """{\"prompt\":\"$prompt\",\"voice\":\"$voice\"}"""
-                val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
-                val body = json.toRequestBody(mediaType)
-                val request = Request.Builder()
-                    .url(backendUrl)
-                    .post(body)
-                    .build()
-                client.newCall(request).execute().use { response ->
-                    Log.d(TAG, "Backend response code: ${response.code}")
-                    if (!response.isSuccessful) {
-                        Log.e(TAG, "Backend error: ${response.code} ${response.message}")
-                    } else {
-                        val responseBytes = response.body?.bytes()
-                        if (responseBytes != null && responseBytes.isNotEmpty()) {
-                            val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
-                            mp3File.writeBytes(responseBytes)
-                            withContext(Dispatchers.Main) {
-                                playAudio(mp3File)
-                            }
-                        } else {
-                            Log.w(TAG, "Empty response body from backend")
-                        }
-                    }
+        if (prompt.isBlank() || voice.isBlank()) {
+            Log.w(TAG, "Skipping TTS request because prompt or voice is blank")
+            return
+        }
+
+        withProcessingIo {
+            val json = """{\"prompt\":\"$prompt\",\"voice\":\"$voice\"}"""
+            val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
+            val body = json.toRequestBody(mediaType)
+
+            val request = Request.Builder()
+                .url(backendUrl)
+                .post(body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                Log.d(TAG, "Backend response code: ${response.code}")
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Backend error: ${response.code} ${response.message}")
+                    return@use
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error sending text to backend", e)
-            } finally {
-                isProcessing = false
+
+                val responseBytes = response.body?.bytes()
+                if (responseBytes != null && responseBytes.isNotEmpty()) {
+                    val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
+                    mp3File.writeBytes(responseBytes)
+                    withContext(Dispatchers.Main) {
+                        playAudio(mp3File)
+                    }
+                } else {
+                    Log.w(TAG, "Empty response body from backend")
+                }
             }
         }
     }
 
     /** Plays an MP3 file using [MediaPlayer] and releases the player once finished. */
     private fun playAudio(file: File) {
+        if (!file.exists()) {
+            Log.w(TAG, "Cannot play missing audio file: ${file.absolutePath}")
+            return
+        }
+
         try {
             Log.d(TAG, "Preparing MediaPlayer for: ${file.absolutePath}")
             val player = MediaPlayer()
+
             player.setDataSource(file.absolutePath)
             player.setOnPreparedListener { mp ->
                 Log.d(TAG, "MediaPlayer prepared, duration=${mp.duration} ms")
@@ -265,9 +288,39 @@ class MainActivity : ComponentActivity() {
                 mp.release()
                 true
             }
+
             player.prepareAsync()
         } catch (e: Exception) {
             Log.e(TAG, "Error playing audio", e)
+        }
+    }
+
+    /** Release recorder resources when start fails. */
+    private fun handleRecordingStartFailure(message: String, error: Exception) {
+        Log.e(TAG, message, error)
+        recorder?.release()
+        recorder = null
+        isRecording = false
+    }
+
+    /**
+     * Update processing state on the main thread to avoid state mutations off the UI thread.
+     */
+    private suspend fun setProcessing(value: Boolean) {
+        withContext(Dispatchers.Main) {
+            isProcessing = value
+        }
+    }
+
+    /** Run work on IO with automatic processing state management. */
+    private fun withProcessingIo(block: suspend () -> Unit) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            setProcessing(true)
+            try {
+                block()
+            } finally {
+                setProcessing(false)
+            }
         }
     }
 
