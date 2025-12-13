@@ -129,15 +129,9 @@ class MainActivity : ComponentActivity() {
             isRecording = true
             Log.d(TAG, "Recording started: ${audioFile.absolutePath}")
         } catch (e: IOException) {
-            Log.e(TAG, "Failed to start recording", e)
-            recorder?.release()
-            recorder = null
-            isRecording = false
+            handleRecordingStartFailure("Failed to start recording", e)
         } catch (e: Exception) {
-            Log.e(TAG, "Unexpected error starting recording", e)
-            recorder?.release()
-            recorder = null
-            isRecording = false
+            handleRecordingStartFailure("Unexpected error starting recording", e)
         }
     }
 
@@ -284,6 +278,14 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Error playing audio", e)
         }
+    }
+
+    /** Release recorder resources when start fails. */
+    private fun handleRecordingStartFailure(message: String, error: Exception) {
+        Log.e(TAG, message, error)
+        recorder?.release()
+        recorder = null
+        isRecording = false
     }
 
     /**
