@@ -166,47 +166,40 @@ class MainActivity : ComponentActivity() {
      * played back on the device.
      */
     private fun sendToBackend(file: File) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            setProcessing(true)
-            try {
-                if (!file.exists()) {
-                    Log.e(TAG, "Audio file does not exist: ${file.absolutePath}")
-                    return@launch
-                }
-                Log.d(TAG, "Sending file: ${file.absolutePath}, size=${file.length()} bytes")
-                val body = MultipartBody.Builder()
-                    .setType(MultipartBody.FORM)
-                    .addFormDataPart(
-                        name = "audio",
-                        filename = file.name,
-                        body = file.asRequestBody("audio/mp4".toMediaTypeOrNull())
-                    )
-                    .build()
-                val request = Request.Builder()
-                    .url(backendUrl)
-                    .post(body)
-                    .build()
-                client.newCall(request).execute().use { response ->
-                    Log.d(TAG, "Backend response code: ${response.code}")
-                    if (!response.isSuccessful) {
-                        Log.e(TAG, "Backend error: ${response.code} ${response.message}")
-                    } else {
-                        val responseBytes = response.body?.bytes()
-                        if (responseBytes != null && responseBytes.isNotEmpty()) {
-                            val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
-                            mp3File.writeBytes(responseBytes)
-                            withContext(Dispatchers.Main) {
-                                playAudio(mp3File)
-                            }
-                        } else {
-                            Log.w(TAG, "Empty response body from backend")
+        withProcessingIo {
+            if (!file.exists()) {
+                Log.e(TAG, "Audio file does not exist: ${file.absolutePath}")
+                return@withProcessingIo
+            }
+            Log.d(TAG, "Sending file: ${file.absolutePath}, size=${file.length()} bytes")
+            val body = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart(
+                    name = "audio",
+                    filename = file.name,
+                    body = file.asRequestBody("audio/mp4".toMediaTypeOrNull())
+                )
+                .build()
+            val request = Request.Builder()
+                .url(backendUrl)
+                .post(body)
+                .build()
+            client.newCall(request).execute().use { response ->
+                Log.d(TAG, "Backend response code: ${response.code}")
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Backend error: ${response.code} ${response.message}")
+                } else {
+                    val responseBytes = response.body?.bytes()
+                    if (responseBytes != null && responseBytes.isNotEmpty()) {
+                        val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
+                        mp3File.writeBytes(responseBytes)
+                        withContext(Dispatchers.Main) {
+                            playAudio(mp3File)
                         }
+                    } else {
+                        Log.w(TAG, "Empty response body from backend")
                     }
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error sending audio to backend", e)
-            } finally {
-                setProcessing(false)
             }
         }
     }
@@ -224,37 +217,30 @@ class MainActivity : ComponentActivity() {
             Log.w(TAG, "Skipping TTS request because prompt or voice is blank")
             return
         }
-        lifecycleScope.launch(Dispatchers.IO) {
-            setProcessing(true)
-            try {
-                val json = """{\"prompt\":\"$prompt\",\"voice\":\"$voice\"}"""
-                val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
-                val body = json.toRequestBody(mediaType)
-                val request = Request.Builder()
-                    .url(backendUrl)
-                    .post(body)
-                    .build()
-                client.newCall(request).execute().use { response ->
-                    Log.d(TAG, "Backend response code: ${response.code}")
-                    if (!response.isSuccessful) {
-                        Log.e(TAG, "Backend error: ${response.code} ${response.message}")
-                    } else {
-                        val responseBytes = response.body?.bytes()
-                        if (responseBytes != null && responseBytes.isNotEmpty()) {
-                            val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
-                            mp3File.writeBytes(responseBytes)
-                            withContext(Dispatchers.Main) {
-                                playAudio(mp3File)
-                            }
-                        } else {
-                            Log.w(TAG, "Empty response body from backend")
+        withProcessingIo {
+            val json = """{\"prompt\":\"$prompt\",\"voice\":\"$voice\"}"""
+            val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
+            val body = json.toRequestBody(mediaType)
+            val request = Request.Builder()
+                .url(backendUrl)
+                .post(body)
+                .build()
+            client.newCall(request).execute().use { response ->
+                Log.d(TAG, "Backend response code: ${response.code}")
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Backend error: ${response.code} ${response.message}")
+                } else {
+                    val responseBytes = response.body?.bytes()
+                    if (responseBytes != null && responseBytes.isNotEmpty()) {
+                        val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
+                        mp3File.writeBytes(responseBytes)
+                        withContext(Dispatchers.Main) {
+                            playAudio(mp3File)
                         }
+                    } else {
+                        Log.w(TAG, "Empty response body from backend")
                     }
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error sending text to backend", e)
-            } finally {
-                setProcessing(false)
             }
         }
     }
@@ -302,6 +288,18 @@ class MainActivity : ComponentActivity() {
     private suspend fun setProcessing(value: Boolean) {
         withContext(Dispatchers.Main) {
             isProcessing = value
+        }
+    }
+
+    /** Run work on IO with automatic processing state management. */
+    private fun withProcessingIo(block: suspend () -> Unit) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            setProcessing(true)
+            try {
+                block()
+            } finally {
+                setProcessing(false)
+            }
         }
     }
 
