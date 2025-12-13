@@ -1,3 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">AiTalkDemo</string>
+    <!-- Application name displayed under the icon -->
+    <string name="app_name">Kim AI Talk Demo</string>
+    <!-- User interface strings -->
+    <string name="select_voice">Select voice</string>
+    <string name="type_message">Type your message</string>
+    <string name="speak">Speak</string>
+    <string name="record">Record</string>
+    <string name="stop">Stop</string>
+    <string name="processing">Processing…</string>
 </resources>
