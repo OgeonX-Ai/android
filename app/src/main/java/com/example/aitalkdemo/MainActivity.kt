@@ -220,6 +220,10 @@ class MainActivity : ComponentActivity() {
      * @param voice the voice or persona name to use
      */
     private fun sendTextToBackend(prompt: String, voice: String) {
+        if (prompt.isBlank() || voice.isBlank()) {
+            Log.w(TAG, "Skipping TTS request because prompt or voice is blank")
+            return
+        }
         lifecycleScope.launch(Dispatchers.IO) {
             setProcessing(true)
             try {
@@ -257,6 +261,10 @@ class MainActivity : ComponentActivity() {
 
     /** Plays an MP3 file using [MediaPlayer] and releases the player once finished. */
     private fun playAudio(file: File) {
+        if (!file.exists()) {
+            Log.w(TAG, "Cannot play missing audio file: ${file.absolutePath}")
+            return
+        }
         try {
             Log.d(TAG, "Preparing MediaPlayer for: ${file.absolutePath}")
             val player = MediaPlayer()
