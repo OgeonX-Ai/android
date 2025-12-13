@@ -14,12 +14,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.aitalkdemo.ui.HomeScreen
 import com.example.aitalkdemo.ui.theme.AiTalkDemoTheme
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -166,7 +166,7 @@ class MainActivity : ComponentActivity() {
      * played back on the device.
      */
     private fun sendToBackend(file: File) {
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             setProcessing(true)
             try {
                 if (!file.exists()) {
@@ -220,7 +220,7 @@ class MainActivity : ComponentActivity() {
      * @param voice the voice or persona name to use
      */
     private fun sendTextToBackend(prompt: String, voice: String) {
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             setProcessing(true)
             try {
                 val json = """{\"prompt\":\"$prompt\",\"voice\":\"$voice\"}"""
