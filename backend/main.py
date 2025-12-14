@@ -156,6 +156,7 @@ async def health():
 
 @app.post("/talk")
 async def talk(
+    request: Request,
     audio: UploadFile | None = File(default=None),
     prompt: str | None = Body(default=None),
     voice: str | None = Body(default=None),
@@ -204,17 +205,6 @@ async def talk(
 
             logger.info("Received file: %s, size=%s bytes", tmp_path, len(raw))
 
-        user_text: str | None = (prompt or "").strip() or None
-
-        if audio is not None:
-            suffix = os.path.splitext(audio.filename or "")[1] or ".m4a"
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                raw = await audio.read()
-                tmp.write(raw)
-                tmp_path = tmp.name
-
-            logger.info("Received file: %s, size=%s bytes", tmp_path, len(raw))
-
             if not user_text:
                 user_text = stt_local(tmp_path)
 
@@ -234,7 +224,7 @@ async def talk(
         reply_text = ask_llm(user_text)
 
         # 3) TTS
-        mp3_bytes = tts_elevenlabs(reply_text, voice_id=voice)
+        mp3_bytes = tts_elevenlabs(reply_text, voice_id=chosen_voice)
 
         total = time.time() - t0_all
         logger.info("/talk total time: %.1fs, MP3 bytes=%s", total, len(mp3_bytes))
