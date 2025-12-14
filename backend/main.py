@@ -9,7 +9,7 @@ from typing import Optional
 import requests
 import whisper
 from dotenv import load_dotenv, set_key
-from fastapi import Body, FastAPI, File, UploadFile
+from fastapi import Body, FastAPI, File, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from huggingface_hub import InferenceClient
 
@@ -171,6 +171,39 @@ async def talk(
     tmp_path = None
 
     try:
+        # Accept prompt/voice from JSON, multipart form, or explicit body parameters.
+        user_text: str | None = None
+        chosen_voice: str | None = None
+
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = None
+            if isinstance(payload, dict):
+                user_text = (payload.get("prompt") or "").strip() or None
+                chosen_voice = (payload.get("voice") or "").strip() or None
+        elif "multipart/form-data" in content_type:
+            form = await request.form()
+            user_text = (form.get("prompt") or "").strip() or None
+            chosen_voice = (form.get("voice") or "").strip() or None
+
+        # Body parameters as fallback (keeps compatibility with prior clients)
+        if user_text is None:
+            user_text = (prompt or "").strip() or None
+        if chosen_voice is None:
+            chosen_voice = (voice or "").strip() or None
+
+        if audio is not None:
+            suffix = os.path.splitext(audio.filename or "")[1] or ".m4a"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                raw = await audio.read()
+                tmp.write(raw)
+                tmp_path = tmp.name
+
+            logger.info("Received file: %s, size=%s bytes", tmp_path, len(raw))
+
         user_text: str | None = (prompt or "").strip() or None
 
         if audio is not None:
@@ -186,10 +219,15 @@ async def talk(
                 user_text = stt_local(tmp_path)
 
         if not user_text:
-            logger.warning("No prompt text supplied or detected from audio")
+            logger.warning(
+                "No prompt text supplied or detected from audio. Content-Type=%s", content_type
+            )
             return JSONResponse(
                 status_code=400,
-                content={"error": "Provide either text prompt or valid audio"},
+                content={
+                    "error": "Provide either text prompt or valid audio",
+                    "hint": "Send JSON {prompt, voice} or multipart/form-data with 'audio'",
+                },
             )
 
         # 2) LLM reply
