@@ -146,7 +146,7 @@ class MainActivity : ComponentActivity() {
                 )
                 .build()
             val request = Request.Builder()
-                .url(backendUrl)
+                .url(talkEndpointUrl)
                 .post(body)
                 .build()
             client.newCall(request).execute().use { response ->
