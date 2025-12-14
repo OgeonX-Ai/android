@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-
-    <style name="Theme.AiTalkDemo" parent="android:Theme.Material.Light.NoActionBar" />
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.AiTalkDemo" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorPrimaryVariant">@color/gradient_start</item>
+        <item name="colorSecondary">@color/gradient_end</item>
+        <item name="android:statusBarColor" tools:targetApi="l">@color/primary</item>
+    </style>
 </resources>
