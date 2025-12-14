@@ -9,7 +9,7 @@ from typing import Optional
 import requests
 import whisper
 from dotenv import load_dotenv, set_key
-from fastapi import FastAPI, File, UploadFile
+from fastapi import Body, FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse, Response
 from huggingface_hub import InferenceClient
 
@@ -117,11 +117,15 @@ def ask_llm(prompt: str) -> str:
     return answer
 
 
-def tts_elevenlabs(text: str) -> bytes:
-    """Generate MP3 with ElevenLabs for given text."""
+def tts_elevenlabs(text: str, voice_id: str | None = None) -> bytes:
+    """Generate MP3 with ElevenLabs for given text.
+
+    :param voice_id: Optional voice ID override; defaults to VOICE_ID.
+    """
+    chosen_voice = voice_id or VOICE_ID
     logger.info("Generating TTS with ElevenLabs...")
     t0 = time.time()
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{chosen_voice}"
     headers = {
         "xi-api-key": ELEVEN_KEY or "",
         "Content-Type": "application/json",
@@ -151,35 +155,48 @@ async def health():
 
 
 @app.post("/talk")
-async def talk(audio: UploadFile = File(...)):
-    """
-    Android sends microphone recording here as form-data:
-    field name 'audio', file type audio/mp4 (m4a).
-    We return MP3 bytes with AI reply.
+async def talk(
+    audio: UploadFile | None = File(default=None),
+    prompt: str | None = Body(default=None),
+    voice: str | None = Body(default=None),
+):
+    """Handle either audio uploads or raw text prompts.
+
+    Android sends microphone recording here as form-data (field name 'audio', file type
+    audio/mp4). When users type text instead, the app posts JSON `{ "prompt": "...",
+    "voice": "optional_voice_id" }`. We return MP3 bytes with the AI reply in both
+    cases.
     """
     t0_all = time.time()
     tmp_path = None
 
     try:
-        suffix = os.path.splitext(audio.filename or "")[1] or ".m4a"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            raw = await audio.read()
-            tmp.write(raw)
-            tmp_path = tmp.name
+        user_text: str | None = (prompt or "").strip() or None
 
-        logger.info("Received file: %s, size=%s bytes", tmp_path, len(raw))
+        if audio is not None:
+            suffix = os.path.splitext(audio.filename or "")[1] or ".m4a"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                raw = await audio.read()
+                tmp.write(raw)
+                tmp_path = tmp.name
 
-        # 1) STT
-        user_text = stt_local(tmp_path)
+            logger.info("Received file: %s, size=%s bytes", tmp_path, len(raw))
+
+            if not user_text:
+                user_text = stt_local(tmp_path)
+
         if not user_text:
-            logger.warning("No speech detected from %s", tmp_path)
-            return JSONResponse(status_code=400, content={"error": "No speech detected"})
+            logger.warning("No prompt text supplied or detected from audio")
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Provide either text prompt or valid audio"},
+            )
 
         # 2) LLM reply
         reply_text = ask_llm(user_text)
 
         # 3) TTS
-        mp3_bytes = tts_elevenlabs(reply_text)
+        mp3_bytes = tts_elevenlabs(reply_text, voice_id=voice)
 
         total = time.time() - t0_all
         logger.info("/talk total time: %.1fs, MP3 bytes=%s", total, len(mp3_bytes))
