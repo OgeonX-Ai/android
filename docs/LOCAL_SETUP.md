@@ -80,6 +80,6 @@ cd android
 - **Recording errors**: verify microphone permission and that no other app holds exclusive audio focus.
 
 ## 8) Next steps
-- CI is configured in `.github/workflows/ci.yml` to run Android unit tests and a backend compile check on every push/PR.
+- Add CI to run `./gradlew lint` or unit tests.
 - Deploy the FastAPI backend to a cloud VM or container platform and update `backendUrl` accordingly.
 - Lock API keys with a secrets manager when publishing builds.
