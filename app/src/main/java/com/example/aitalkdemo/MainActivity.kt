@@ -188,17 +188,19 @@ class MainActivity : ComponentActivity() {
                 Log.d(TAG, "Backend response code: ${response.code}")
                 if (!response.isSuccessful) {
                     Log.e(TAG, "Backend error: ${response.code} ${response.message}")
-                } else {
-                    val responseBytes = response.body?.bytes()
-                    if (responseBytes != null && responseBytes.isNotEmpty()) {
-                        val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
-                        mp3File.writeBytes(responseBytes)
-                        withContext(Dispatchers.Main) {
-                            playAudio(mp3File)
-                        }
-                    } else {
-                        Log.w(TAG, "Empty response body from backend")
-                    }
+                    return@use
+                }
+
+                val responseBytes = response.body?.bytes()
+                if (responseBytes.isNullOrEmpty()) {
+                    Log.w(TAG, "Empty response body from backend")
+                    return@use
+                }
+
+                val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
+                mp3File.writeBytes(responseBytes)
+                withContext(Dispatchers.Main) {
+                    playAudio(mp3File)
                 }
             }
         }
@@ -229,19 +231,19 @@ class MainActivity : ComponentActivity() {
                 Log.d(TAG, "Backend response code: ${response.code}")
                 if (!response.isSuccessful) {
                     Log.e(TAG, "Backend error: ${response.code} ${response.message}")
-                } else {
-                    val responseBytes = response.body?.bytes()
-                    if (responseBytes != null && responseBytes.isNotEmpty()) {
-                        val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
-                        mp3File.writeBytes(responseBytes)
-                        withContext(Dispatchers.Main) {
-                            playAudio(mp3File)
-                        }
-                    } else {
-                        Log.w(TAG, "Empty response body from backend")
-                    }
-                } else {
+                    return@use
+                }
+
+                val responseBytes = response.body?.bytes()
+                if (responseBytes.isNullOrEmpty()) {
                     Log.w(TAG, "Empty response body from backend")
+                    return@use
+                }
+
+                val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
+                mp3File.writeBytes(responseBytes)
+                withContext(Dispatchers.Main) {
+                    playAudio(mp3File)
                 }
             }
         }
