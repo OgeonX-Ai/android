@@ -34,6 +34,12 @@ class MainActivity : ComponentActivity() {
 
     // MediaRecorder used for microphone capture
     private var recorder: MediaRecorder? = null
+    // Compose state for whether we are currently recording
+    private var isProcessing by mutableStateOf(false)
+    // Temporary file for the recorded audio
+    private lateinit var audioFile: File
+
+    // OkHttp client with generous timeouts for Whisper + LLM + TTS pipeline
     private var isRecording by mutableStateOf(false)
     private var isProcessing by mutableStateOf(false)
     private lateinit var audioFile: File
@@ -44,9 +50,15 @@ class MainActivity : ComponentActivity() {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * Base URL of the FastAPI backend. You should point this to your own server.
+     * For Android emulators, 10.0.2.2 maps to the host machine's localhost.
+     */
     private val backendUrl = "http://10.0.2.2:8000/talk"
 
-    private val voices = listOf("Kim", "Milla", "John", "Lily")
+    /** List of example voices/personas. Replace with values supported by your API. */
+    private val availableVoices = listOf("Kim", "Milla", "John", "Lily")
+    private val backendUrl = "http://10.0.2.2:8000/talk"
 
     /** List of example voices/personas. Replace with values supported by your API. */
     private val voices = listOf("Kim", "Milla", "John", "Lily")
