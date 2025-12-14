@@ -36,6 +36,8 @@ An Android sample that combines Jetpack Compose UI with microphone capture and a
 
 ## Build and run
 
+If you want a step-by-step walkthrough (including cloning, backend setup, and customization tips), see [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md).
+
 1. Open the project in Android Studio.
 2. Ensure Compose and OkHttp dependencies remain in `app/build.gradle.kts` (they are included in the template).
 3. Connect a device or start an emulator.
