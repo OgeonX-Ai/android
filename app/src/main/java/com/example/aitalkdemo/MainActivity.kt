@@ -240,6 +240,8 @@ class MainActivity : ComponentActivity() {
                     } else {
                         Log.w(TAG, "Empty response body from backend")
                     }
+                } else {
+                    Log.w(TAG, "Empty response body from backend")
                 }
             }
         }
