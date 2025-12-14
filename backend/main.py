@@ -180,7 +180,7 @@ async def health():
 
 
 @app.post("/talk")
-async def talk(request: Request):
+async def talk(http_request: Request):
     """Handle either audio uploads or raw text prompts.
 
     Android sends microphone recording here as form-data (field name 'audio', file type
@@ -192,14 +192,14 @@ async def talk(request: Request):
     tmp_path = None
 
     try:
-        content_type = request.headers.get("content-type", "").lower()
+        content_type = http_request.headers.get("content-type", "").lower()
         user_text: str | None = None
         voice: str | None = None
         audio_file: UploadFile | None = None
 
         if content_type.startswith("application/json"):
             try:
-                payload = await request.json()
+                payload = await http_request.json()
             except Exception:
                 logger.warning("Invalid JSON payload received for /talk")
                 return JSONResponse(status_code=400, content={"error": "Invalid JSON payload"})
@@ -210,7 +210,7 @@ async def talk(request: Request):
             else:
                 return JSONResponse(status_code=400, content={"error": "Invalid JSON payload"})
         elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
-            form = await request.form()
+            form = await http_request.form()
             audio_file = form.get("audio") if form else None
             if audio_file is not None and not isinstance(audio_file, UploadFile):
                 audio_file = None
