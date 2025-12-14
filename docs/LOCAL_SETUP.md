@@ -60,7 +60,8 @@ cd android
    Android tests automatically if your SDK is not configured). If you need an SDK locally, run `./scripts/bootstrap_android_sdk.sh`
    once; it installs platform-tools, platform 34, and build-tools 34.0.0 under `$HOME/android-sdk` by default. The helper falls
    back to a GitHub mirror if Google downloads are blocked and will reuse a pre-downloaded command-line tools ZIP if you place it
-   in `$HOME/android-sdk/`. When it succeeds, it writes `local.properties` with the SDK path for you (overwriting if present):
+   in `$HOME/android-sdk/` or point `CMDLINE_ZIP_PATH=/absolute/path/to/commandlinetools-linux-11076708_latest.zip`. When it
+   succeeds, it writes `local.properties` with the SDK path for you (overwriting if present):
    ```bash
    ./scripts/run_tests.sh
    ```

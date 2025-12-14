@@ -76,7 +76,7 @@ The included FastAPI backend accepts multipart audio uploads and returns MP3 aud
 
 ## Testing
 
-- Create a `local.properties` file pointing to your Android SDK (copy [`local.properties.example`](local.properties.example) and adjust `sdk.dir`). Android Studio writes this file automatically when an SDK is configured. If you do not have an SDK yet, run `./scripts/bootstrap_android_sdk.sh` to download a minimal command-line install (platform 34/build-tools 34.0.0) under `$HOME/android-sdk` and re-run the tests. The helper falls back to a GitHub mirror if the Google download is blocked and will reuse a pre-downloaded ZIP placed in `$HOME/android-sdk/`.
+- Create a `local.properties` file pointing to your Android SDK (copy [`local.properties.example`](local.properties.example) and adjust `sdk.dir`). Android Studio writes this file automatically when an SDK is configured. If you do not have an SDK yet, run `./scripts/bootstrap_android_sdk.sh` to download a minimal command-line install (platform 34/build-tools 34.0.0) under `$HOME/android-sdk` and re-run the tests. The helper falls back to a GitHub mirror if the Google download is blocked and will reuse a pre-downloaded ZIP placed in `$HOME/android-sdk/` or a custom path via `CMDLINE_ZIP_PATH=/path/to/commandlinetools-linux-11076708_latest.zip`.
 - Prefer the bundled test runner script for local checks; it avoids Gradle distribution downloads and skips Android tests if your SDK is missing:
   ```bash
   ./scripts/run_tests.sh
