@@ -20,7 +20,7 @@ cd android
    python -m venv .venv
    source .venv/bin/activate
    ```
-2. Install dependencies (the Whisper package installs from GitHub under the canonical name `openai-whisper`; ensure `git` is available on your PATH):
+2. Install dependencies (the Whisper package installs from GitHub under the canonical name `openai-whisper`; ensure `git` is available on your PATH). The upload handler depends on `python-multipart`, which is bundled in `requirements.txt`:
    ```bash
    pip install --upgrade pip
    # Pre-pinning build tools avoids `KeyError: '__version__'` on Windows when
@@ -34,6 +34,7 @@ cd android
    cp .env.example .env
    # edit .env to add HF_API_TOKEN, ELEVENLABS_API_KEY, VOICE_ID (optional)
    ```
+   If these values are missing when you start the server and the terminal is interactive, the backend will prompt once for them and save to `.env` automatically.
 4. Start the API server:
    ```bash
    uvicorn main:app --host 0.0.0.0 --port 8000

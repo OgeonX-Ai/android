@@ -47,7 +47,7 @@ If you want a step-by-step walkthrough (including cloning, backend setup, and cu
 
 The included FastAPI backend accepts multipart audio uploads and returns MP3 audio replies after STT → LLM → TTS processing.
 
-1. Install dependencies (note: the Whisper dependency is installed from GitHub under the canonical package name `openai-whisper`; ensure `git` is available on your PATH):
+1. Install dependencies (note: the Whisper dependency is installed from GitHub under the canonical package name `openai-whisper`; ensure `git` is available on your PATH). The server also needs `python-multipart` for handling uploads, which is bundled in `requirements.txt`:
 
    ```bash
    cd backend
@@ -63,6 +63,7 @@ The included FastAPI backend accepts multipart audio uploads and returns MP3 aud
    - `HF_API_TOKEN` (Hugging Face Inference API token)
    - `ELEVENLABS_API_KEY` (for TTS)
    - optional `VOICE_ID` override
+   If these variables are missing when you start the server **and your terminal is interactive**, the backend will prompt for the values once and persist them to `.env` automatically.
 
 3. Start the server (default port 8000):
 

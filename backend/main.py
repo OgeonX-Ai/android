@@ -1,12 +1,14 @@
 import logging
 import os
+import sys
 import tempfile
 import time
+from pathlib import Path
 from typing import Optional
 
 import requests
 import whisper
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse, Response
 from huggingface_hub import InferenceClient
@@ -18,16 +20,45 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+ENV_PATH = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=ENV_PATH, override=False)
 
-HF_TOKEN: Optional[str] = os.getenv("HF_API_TOKEN")
-ELEVEN_KEY: Optional[str] = os.getenv("ELEVENLABS_API_KEY")
+
+def _ensure_env(name: str, prompt: str) -> Optional[str]:
+    """Prompt for a missing env var and persist it into .env when interactive."""
+
+    current = os.getenv(name)
+    if current:
+        return current
+
+    if not sys.stdin.isatty():
+        logger.warning("%s missing in .env and stdin is not interactive; skipping prompt", name)
+        return None
+
+    try:
+        user_value = input(f"{prompt}: ").strip()
+    except EOFError:
+        logger.warning("Input unavailable while prompting for %s", name)
+        return None
+
+    if not user_value:
+        logger.warning("%s not provided; backend may fail to start", name)
+        return None
+
+    set_key(str(ENV_PATH), name, user_value)
+    os.environ[name] = user_value
+    logger.info("Saved %s to %s", name, ENV_PATH)
+    return user_value
+
+
+HF_TOKEN: Optional[str] = _ensure_env("HF_API_TOKEN", "Enter your Hugging Face token (HF_API_TOKEN)")
+ELEVEN_KEY: Optional[str] = _ensure_env("ELEVENLABS_API_KEY", "Enter your ElevenLabs API key (ELEVENLABS_API_KEY)")
 VOICE_ID: str = os.getenv("VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 
 if not HF_TOKEN:
-    logger.warning("HF_API_TOKEN missing in .env")
+    logger.warning("HF_API_TOKEN missing; LLM calls will fail")
 if not ELEVEN_KEY:
-    logger.warning("ELEVENLABS_API_KEY missing in .env")
+    logger.warning("ELEVENLABS_API_KEY missing; TTS will fail")
 
 # Hugging Face LLM (chat model)
 HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
