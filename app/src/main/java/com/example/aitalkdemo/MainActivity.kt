@@ -192,7 +192,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val responseBytes = response.body?.bytes()
-                if (responseBytes == null || responseBytes.isEmpty()) {
+                if (responseBytes.isNullOrEmpty()) {
                     Log.w(TAG, "Empty response body from backend")
                     return@use
                 }
@@ -235,7 +235,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val responseBytes = response.body?.bytes()
-                if (responseBytes == null || responseBytes.isEmpty()) {
+                if (responseBytes.isNullOrEmpty()) {
                     Log.w(TAG, "Empty response body from backend")
                     return@use
                 }
