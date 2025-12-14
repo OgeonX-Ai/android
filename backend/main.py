@@ -123,9 +123,9 @@ logger.info("Loading Whisper model 'tiny' for STT (Finnish)...")
 try:
     whisper_model = whisper.load_model("tiny")
     logger.info("Whisper loaded")
-except Exception as exc:  # pragma: no cover - startup failure
+except Exception:  # pragma: no cover - startup failure
     logger.exception("Failed to load Whisper model")
-    raise RuntimeError("Whisper model failed to load") from exc
+    whisper_model = None
 
 app = FastAPI(title="Empathy Phone Mobile Backend")
 
@@ -146,21 +146,25 @@ def stt_local(request_logger: logging.LoggerAdapter, path: str) -> str:
 def ask_llm(request_logger: logging.LoggerAdapter, prompt: str) -> str:
     request_logger.info("Calling LLM model=%s via router.huggingface.co", HF_MODEL)
     t0 = time.time()
-    response = hf_client.chat_completion(
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a warm, empathetic assistant. "
-                    "If user speaks Finnish, answer in Finnish. "
-                    "Otherwise answer in English. Keep replies short (1–3 sentences)."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=120,
-        temperature=0.7,
-    )
+    try:
+        response = client.chat_completion(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a warm, empathetic assistant. "
+                        "If user speaks Finnish, answer in Finnish. "
+                        "Otherwise answer in English. Keep replies short (1–3 sentences)."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=120,
+            temperature=0.7,
+        )
+    except Exception as err:  # pragma: no cover - upstream issues
+        request_logger.exception("LLM call failed")
+        raise HTTPException(status_code=502, detail=f"LLM provider error: {err}") from err
     dt = time.time() - t0
     answer = response.choices[0].message["content"]
     request_logger.info("LLM reply in %.2fs chars=%s", dt, len(answer))
