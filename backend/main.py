@@ -196,7 +196,7 @@ async def talk(request: Request):
                 return JSONResponse(status_code=400, content={"error": "Invalid JSON payload"})
         elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
             form = await request.form()
-            audio_file = form.get("audio") if isinstance(form, dict) else None
+            audio_file = form.get("audio") if form else None
             if audio_file is not None and not isinstance(audio_file, UploadFile):
                 audio_file = None
 
