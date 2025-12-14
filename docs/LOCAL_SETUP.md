@@ -20,11 +20,12 @@ cd android
    python -m venv .venv
    source .venv/bin/activate
    ```
-2. Install dependencies:
+2. Install dependencies (the Whisper package is published as `openai-whisper`, already pinned in `requirements.txt`):
    ```bash
    pip install --upgrade pip
    pip install -r requirements.txt
    ```
+   If you hit PyTorch download issues on Linux CI, add `--extra-index-url https://download.pytorch.org/whl/cpu` to the install command.
 3. Configure environment variables by copying the template and filling in keys:
    ```bash
    cp .env.example .env
@@ -51,10 +52,20 @@ cd android
    - **Speak**: type text, pick a voice, and send to backend for TTS.
    - **Record**: tap to start/stop recording; audio uploads on stop.
 4. Watch `logcat` for networking and playback logs if troubleshooting.
-5. To run tests from the command line without downloading a new wrapper distribution, use the preinstalled `gradle` binary:
+5. To run tests from the command line without downloading a new wrapper distribution, start with the bundled helper (it skips
+   Android tests automatically if your SDK is not configured):
+   ```bash
+   ./scripts/run_tests.sh
+   ```
+   Or use the preinstalled `gradle` binary directly when your SDK is set:
    ```bash
    gradle test                 # unit tests
    gradle connectedAndroidTest # instrumentation (emulator/device + backend required)
+   ```
+   For a fast backend sanity check (no external API calls), run:
+   ```bash
+   cd backend
+   python -m compileall .
    ```
 
 ## 6) Customizing for your own app

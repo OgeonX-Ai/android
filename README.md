@@ -47,7 +47,7 @@ If you want a step-by-step walkthrough (including cloning, backend setup, and cu
 
 The included FastAPI backend accepts multipart audio uploads and returns MP3 audio replies after STT → LLM → TTS processing.
 
-1. Install dependencies:
+1. Install dependencies (note: the Whisper dependency is published as `openai-whisper` and already pinned in `requirements.txt`):
 
    ```bash
    cd backend
@@ -73,16 +73,29 @@ The included FastAPI backend accepts multipart audio uploads and returns MP3 aud
 ## Testing
 
 - Create a `local.properties` file pointing to your Android SDK (copy [`local.properties.example`](local.properties.example) and adjust `sdk.dir`). Android Studio writes this file automatically when an SDK is configured.
-- Run JVM/unit tests:
+- Prefer the bundled test runner script for local checks; it avoids Gradle distribution downloads and skips Android tests if your SDK is missing:
   ```bash
-  gradle test
+  ./scripts/run_tests.sh
   ```
-  If the wrapper download is blocked in your environment, using the preinstalled `gradle` command avoids fetching the distribution.
-- Run instrumentation tests on an emulator/device with the backend running (for end-to-end coverage):
-  ```bash
-  gradle connectedAndroidTest
-  ```
-  Ensure `adb devices` lists at least one online target and that the backend is reachable from the device.
+- If you want to run individual steps manually:
+  - JVM/unit tests (requires Android SDK configured):
+    ```bash
+    gradle test
+    ```
+    If the Gradle wrapper download is blocked in your environment, the preinstalled `gradle` command avoids fetching the distribution.
+  - Instrumentation tests on an emulator/device with the backend running (for end-to-end coverage):
+    ```bash
+    gradle connectedAndroidTest
+    ```
+    Ensure `adb devices` lists at least one online target and that the backend is reachable from the device.
+  - Quick backend sanity check (no external services required):
+    ```bash
+    cd backend
+    python -m compileall .
+    ```
+  This verifies the backend sources parse correctly in CI and local environments before hitting external APIs.
+
+Automated CI runs for both Android unit tests and the backend compile check are defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Pushes and pull requests will execute the same commands shown above.
 
 ## Backend expectations
 
