@@ -11,7 +11,7 @@ import requests
 from dotenv import load_dotenv, set_key
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
-from huggingface_hub import InferenceClient
+from huggingface_hub import InferenceClient, InferenceTimeoutError
 
 # ------------------ Init ------------------
 logging.basicConfig(
@@ -251,9 +251,13 @@ async def talk(request: Request):
 
         return Response(content=mp3_bytes, media_type="audio/mpeg")
 
+    except InferenceTimeoutError as hf_timeout_err:
+        logger.exception("LLM inference timeout in /talk")
+        return JSONResponse(status_code=504, content={"error": "LLM request timed out"})
     except requests.HTTPError as http_err:
         logger.exception("TTS HTTP error")
-        return JSONResponse(status_code=http_err.response.status_code, content={"error": str(http_err)})
+        status_code = getattr(getattr(http_err, "response", None), "status_code", 502)
+        return JSONResponse(status_code=status_code, content={"error": str(http_err)})
     except (httpx.TimeoutException, requests.Timeout) as timeout_err:
         logger.exception("Upstream timeout in /talk")
         return JSONResponse(status_code=504, content={"error": "Upstream request timed out"})
