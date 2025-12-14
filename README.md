@@ -2,22 +2,13 @@
 
 An Android sample that combines Jetpack Compose UI with microphone capture and a FastAPI backend to demonstrate text-to-speech and speech-to-text (via Whisper) style interactions. It uses OkHttp for networking and `MediaRecorder`/`MediaPlayer` for audio capture and playback. A reference FastAPI backend (with Whisper STT, Hugging Face LLM, and ElevenLabs TTS) is included under `backend/`.
 
-> If you want to try ElevenLabs voices, you can sign up via this referral link: https://ogeonx-ai.github.io/kim-ai-voice-demo/elevenlabs
-
 ## Project structure
 
 - `app/src/main/java/com/example/aitalkdemo/MainActivity.kt` — entry activity that wires up Compose, microphone permissions, recording, and network calls.
 - `app/src/main/java/com/example/aitalkdemo/ui/HomeScreen.kt` — Compose UI with text input, voice picker, and controls for speaking or recording.
 - `app/src/main/java/com/example/aitalkdemo/ui/theme/` — theme, color, and typography definitions for the Material 3 setup.
 - `app/src/main/res/values/` — strings, colors, and theme resources used by the activity theme and Compose.
-- `backend/` — reference FastAPI service that powers STT → LLM → TTS using Whisper, Hugging Face Inference, and ElevenLabs (see the ElevenLabs onboarding link above).
-
-## Documentation map
-
-- Local setup: [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md)
-- Azure deployment guide: [docs/DEPLOY_AZURE.md](docs/DEPLOY_AZURE.md)
-- Backend operations/runbook: [docs/BACKEND_OPERATIONS.md](docs/BACKEND_OPERATIONS.md)
-- ElevenLabs signup/referral (for TTS keys): https://ogeonx-ai.github.io/kim-ai-voice-demo/elevenlabs
+- `backend/` — reference FastAPI service that powers STT → LLM → TTS using Whisper, Hugging Face Inference, and ElevenLabs.
 
 ## Features
 
@@ -35,20 +26,17 @@ An Android sample that combines Jetpack Compose UI with microphone capture and a
 - A reachable FastAPI backend with a `/talk` endpoint that accepts either:
   - `multipart/form-data` containing an `audio` file (`audio/mp4`), or
   - JSON payload with `prompt` and `voice` fields, responding with MP3 audio bytes.
-- ElevenLabs account for TTS: https://ogeonx-ai.github.io/kim-ai-voice-demo/elevenlabs
 
 ## Configuration
 
 - Update `backendUrl` in `MainActivity` if your backend is not reachable at `http://10.0.2.2:8000/talk` (the default for Android emulators talking to host localhost).
 - Adjust the `voices` list in `MainActivity` to match the voice/persona names supported by your backend.
 - If your backend expects different field names or content types, adapt the multipart form and JSON payloads in `sendToBackend` and `sendTextToBackend` respectively.
-- Create a `.env` in `backend/` based on `.env.example` to supply `HF_API_TOKEN`, `ELEVENLABS_API_KEY`, and optionally `VOICE_ID`. If you need an ElevenLabs API key, enroll here: https://ogeonx-ai.github.io/kim-ai-voice-demo/elevenlabs
+- Create a `.env` in `backend/` based on `.env.example` to supply `HF_API_TOKEN`, `ELEVENLABS_API_KEY`, and optionally `VOICE_ID`.
 
 ## Build and run
 
 If you want a step-by-step walkthrough (including cloning, backend setup, and customization tips), see [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md).
-
-For cloud hosting of the backend (App Service, Container Apps, or a VM) and environment hardening, read [docs/DEPLOY_AZURE.md](docs/DEPLOY_AZURE.md).
 
 1. Open the project in Android Studio.
 2. Ensure Compose and OkHttp dependencies remain in `app/build.gradle.kts` (they are included in the template).
@@ -59,7 +47,7 @@ For cloud hosting of the backend (App Service, Container Apps, or a VM) and envi
 
 The included FastAPI backend accepts multipart audio uploads and returns MP3 audio replies after STT → LLM → TTS processing.
 
-1. Install dependencies (note: the Whisper dependency is installed from GitHub under the canonical package name `openai-whisper`; ensure `git` is available on your PATH). The server also needs `python-multipart` for handling uploads, which is bundled in `requirements.txt`. If you are new to ElevenLabs, claim an API key via https://ogeonx-ai.github.io/kim-ai-voice-demo/elevenlabs before continuing:
+1. Install dependencies (note: the Whisper dependency is installed from GitHub under the canonical package name `openai-whisper`; ensure `git` is available on your PATH). The server also needs `python-multipart` for handling uploads, which is bundled in `requirements.txt`:
 
    ```bash
    cd backend
@@ -113,8 +101,6 @@ The included FastAPI backend accepts multipart audio uploads and returns MP3 aud
 
 Automated CI runs for both Android unit tests and the backend compile check are defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Pushes and pull requests will execute the same commands shown above.
 
-If you plan to deploy the backend to Azure (recommended for sharing with testers), see [docs/DEPLOY_AZURE.md](docs/DEPLOY_AZURE.md) for steps and cost/scale notes.
-
 ## Backend expectations
 
 - **Audio upload**: POST multipart with field name `audio` and MIME type `audio/mp4`; returns raw MP3 bytes.
@@ -126,7 +112,6 @@ If you plan to deploy the backend to Azure (recommended for sharing with testers
 - Tap **Speak** after entering text and selecting a voice to trigger TTS.
 - Tap **Record** to start/stop microphone capture; stopping will upload the clip automatically.
 - The buttons reflect `Processing…` and `Stop` states while work is underway.
-- Make sure your ElevenLabs account (https://ogeonx-ai.github.io/kim-ai-voice-demo/elevenlabs) is funded or on a free tier before load testing.
 
 ## Troubleshooting
 
