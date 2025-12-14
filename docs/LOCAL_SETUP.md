@@ -1,6 +1,6 @@
 # Local setup and testing guide
 
-This guide walks through installing the Android client, running the bundled FastAPI backend locally, and customizing the app to point at your own services. If you need an ElevenLabs key for TTS, sign up via https://ogeonx-ai.github.io/kim-ai-voice-demo/elevenlabs before continuing.
+This guide walks through installing the Android client, running the bundled FastAPI backend locally, and customizing the app to point at your own services.
 
 ## 1) Prerequisites
 - **Android**: Android Studio Hedgehog+, Android SDK 33+, and an emulator or device running Android 8.0 (API 26) or newer.
@@ -20,7 +20,7 @@ cd android
    python -m venv .venv
    source .venv/bin/activate
    ```
-2. Install dependencies (the Whisper package installs from GitHub under the canonical name `openai-whisper`; ensure `git` is available on your PATH). The upload handler depends on `python-multipart`, which is bundled in `requirements.txt`. Grab an ElevenLabs API key if you do not already have one: https://ogeonx-ai.github.io/kim-ai-voice-demo/elevenlabs
+2. Install dependencies (the Whisper package installs from GitHub under the canonical name `openai-whisper`; ensure `git` is available on your PATH). The upload handler depends on `python-multipart`, which is bundled in `requirements.txt`:
    ```bash
    pip install --upgrade pip
    # Pre-pinning build tools avoids `KeyError: '__version__'` on Windows when
@@ -39,7 +39,7 @@ cd android
    ```bash
    uvicorn main:app --host 0.0.0.0 --port 8000
    ```
-5. Keep this terminal running; the Android app will call `http://10.0.2.2:8000/talk` when using an emulator. If you prefer a hosted backend, follow [docs/DEPLOY_AZURE.md](DEPLOY_AZURE.md) to push it to Azure and update `backendUrl` accordingly.
+5. Keep this terminal running; the Android app will call `http://10.0.2.2:8000/talk` when using an emulator.
 
 ## 4) Android app setup
 1. Open the project root (`android/`) in **Android Studio**.
@@ -90,6 +90,5 @@ cd android
 
 ## 8) Next steps
 - CI is configured in `.github/workflows/ci.yml` to run Android unit tests and a backend compile check on every push/PR.
-- Deploy the FastAPI backend to Azure using [docs/DEPLOY_AZURE.md](DEPLOY_AZURE.md) for Container Apps or App Service instructions.
-- Review production runbooks in [docs/BACKEND_OPERATIONS.md](BACKEND_OPERATIONS.md) for monitoring, scaling, and secret management.
+- Deploy the FastAPI backend to a cloud VM or container platform and update `backendUrl` accordingly.
 - Lock API keys with a secrets manager when publishing builds.
