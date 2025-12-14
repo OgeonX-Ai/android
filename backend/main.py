@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import httpx
 import requests
 from dotenv import load_dotenv, set_key
 from fastapi import FastAPI, Request, UploadFile
@@ -53,6 +54,8 @@ def _ensure_env(name: str, prompt: str) -> Optional[str]:
 HF_TOKEN: Optional[str] = _ensure_env("HF_API_TOKEN", "Enter your Hugging Face token (HF_API_TOKEN)")
 ELEVEN_KEY: Optional[str] = _ensure_env("ELEVENLABS_API_KEY", "Enter your ElevenLabs API key (ELEVENLABS_API_KEY)")
 VOICE_ID: str = os.getenv("VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
+HF_TIMEOUT: float = float(os.getenv("HF_TIMEOUT", "180"))
+ELEVENLABS_TIMEOUT: float = float(os.getenv("ELEVENLABS_TIMEOUT", "180"))
 
 if not HF_TOKEN:
     logger.warning("HF_API_TOKEN missing; LLM calls will fail")
@@ -61,7 +64,7 @@ if not ELEVEN_KEY:
 
 # Hugging Face LLM (chat model)
 HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
-hf_client = InferenceClient(model=HF_MODEL, token=HF_TOKEN)
+hf_client = InferenceClient(model=HF_MODEL, token=HF_TOKEN, timeout=HF_TIMEOUT)
 
 # Whisper STT
 whisper_model = None
@@ -153,7 +156,7 @@ def tts_elevenlabs(text: str, voice_id: str | None = None) -> bytes:
             "similarity_boost": 0.8,
         },
     }
-    response = requests.post(url, json=data, headers=headers, timeout=120)
+    response = requests.post(url, json=data, headers=headers, timeout=ELEVENLABS_TIMEOUT)
     logger.info("TTS status: %s", response.status_code)
     response.raise_for_status()
     dt = time.time() - t0
@@ -188,7 +191,12 @@ async def talk(request: Request):
         audio_file: UploadFile | None = None
 
         if content_type.startswith("application/json"):
-            payload = await request.json()
+            try:
+                payload = await request.json()
+            except Exception:
+                logger.warning("Invalid JSON payload received for /talk")
+                return JSONResponse(status_code=400, content={"error": "Invalid JSON payload"})
+
             if isinstance(payload, dict):
                 user_text = (str(payload.get("prompt") or "").strip() or None)
                 voice = (str(payload.get("voice") or "").strip() or None)
@@ -224,8 +232,16 @@ async def talk(request: Request):
                 content={"error": "Provide either text prompt or valid audio"},
             )
 
+        if not HF_TOKEN:
+            logger.error("HF_API_TOKEN missing; cannot process LLM prompts")
+            return JSONResponse(status_code=503, content={"error": "LLM unavailable: missing HF_API_TOKEN"})
+
         # 2) LLM reply
         reply_text = ask_llm(user_text)
+
+        if not ELEVEN_KEY:
+            logger.error("ELEVENLABS_API_KEY missing; cannot generate TTS")
+            return JSONResponse(status_code=503, content={"error": "TTS unavailable: missing ELEVENLABS_API_KEY"})
 
         # 3) TTS
         mp3_bytes = tts_elevenlabs(reply_text, voice_id=voice)
@@ -238,6 +254,18 @@ async def talk(request: Request):
     except requests.HTTPError as http_err:
         logger.exception("TTS HTTP error")
         return JSONResponse(status_code=http_err.response.status_code, content={"error": str(http_err)})
+    except (httpx.TimeoutException, requests.Timeout) as timeout_err:
+        logger.exception("Upstream timeout in /talk")
+        return JSONResponse(status_code=504, content={"error": "Upstream request timed out"})
+    except httpx.HTTPStatusError as httpx_http_err:
+        logger.exception("LLM HTTP error")
+        return JSONResponse(status_code=httpx_http_err.response.status_code, content={"error": str(httpx_http_err)})
+    except httpx.RequestError as httpx_req_err:
+        logger.exception("LLM request error")
+        return JSONResponse(status_code=502, content={"error": "LLM service unavailable"})
+    except requests.RequestException as req_err:
+        logger.exception("Network error in /talk")
+        return JSONResponse(status_code=502, content={"error": "Upstream service unavailable"})
     except Exception as exc:  # pragma: no cover - catch-all for runtime issues
         logger.exception("Error in /talk")
         return JSONResponse(status_code=500, content={"error": str(exc)})
