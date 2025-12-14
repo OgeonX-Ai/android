@@ -18,6 +18,7 @@ An Android sample that combines Jetpack Compose UI with microphone capture and a
 - Azure deployment guide: [docs/DEPLOY_AZURE.md](docs/DEPLOY_AZURE.md)
 - Backend operations/runbook: [docs/BACKEND_OPERATIONS.md](docs/BACKEND_OPERATIONS.md)
 - ElevenLabs signup/referral (for TTS keys): https://ogeonx-ai.github.io/kim-ai-voice-demo/elevenlabs
+- `backend/` — reference FastAPI service that powers STT → LLM → TTS using Whisper, Hugging Face Inference, and ElevenLabs.
 
 ## Features
 
@@ -43,6 +44,7 @@ An Android sample that combines Jetpack Compose UI with microphone capture and a
 - Adjust the `voices` list in `MainActivity` to match the voice/persona names supported by your backend.
 - If your backend expects different field names or content types, adapt the multipart form and JSON payloads in `sendToBackend` and `sendTextToBackend` respectively.
 - Create a `.env` in `backend/` based on `.env.example` to supply `HF_API_TOKEN`, `ELEVENLABS_API_KEY`, and optionally `VOICE_ID`. If you need an ElevenLabs API key, enroll here: https://ogeonx-ai.github.io/kim-ai-voice-demo/elevenlabs
+- Create a `.env` in `backend/` based on `.env.example` to supply `HF_API_TOKEN`, `ELEVENLABS_API_KEY`, and optionally `VOICE_ID`.
 
 ## Build and run
 
@@ -59,7 +61,7 @@ For cloud hosting of the backend (App Service, Container Apps, or a VM) and envi
 
 The included FastAPI backend accepts multipart audio uploads and returns MP3 audio replies after STT → LLM → TTS processing.
 
-1. Install dependencies (note: the Whisper dependency is installed from GitHub under the canonical package name `openai-whisper`; ensure `git` is available on your PATH). The server also needs `python-multipart` for handling uploads, which is bundled in `requirements.txt`. If you are new to ElevenLabs, claim an API key via https://ogeonx-ai.github.io/kim-ai-voice-demo/elevenlabs before continuing:
+1. Install dependencies (note: the Whisper dependency is installed from GitHub under the canonical package name `openai-whisper`; ensure `git` is available on your PATH). The server also needs `python-multipart` for handling uploads, which is bundled in `requirements.txt`:
 
    ```bash
    cd backend
