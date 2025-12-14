@@ -1,0 +1,12 @@
+# Build tools pinned to avoid upstream packaging regressions while installing
+# `openai-whisper` from source (Windows users reported `KeyError: '__version__'`)
+setuptools==68.2.2
+wheel==0.41.3
+
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+python-dotenv==1.0.1
+# Use the published package name to avoid pip resolving errors on Windows.
+openai-whisper==20231117
+requests==2.31.0
+huggingface-hub==0.23.5
