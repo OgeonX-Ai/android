@@ -68,6 +68,21 @@ The included FastAPI backend accepts multipart audio uploads and returns MP3 aud
    ```
 
 4. On Android emulator, the app will reach the host via `http://10.0.2.2:8000/talk`.
+   Launching the Android app without the backend running is fine for UI exploration, but the **Speak** and **Record** actions require a live server to return audio.
+
+## Testing
+
+- Create a `local.properties` file pointing to your Android SDK (copy [`local.properties.example`](local.properties.example) and adjust `sdk.dir`). Android Studio writes this file automatically when an SDK is configured.
+- Run JVM/unit tests:
+  ```bash
+  gradle test
+  ```
+  If the wrapper download is blocked in your environment, using the preinstalled `gradle` command avoids fetching the distribution.
+- Run instrumentation tests on an emulator/device with the backend running (for end-to-end coverage):
+  ```bash
+  gradle connectedAndroidTest
+  ```
+  Ensure `adb devices` lists at least one online target and that the backend is reachable from the device.
 
 ## Backend expectations
 

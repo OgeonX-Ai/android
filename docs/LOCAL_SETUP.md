@@ -42,6 +42,7 @@ cd android
 3. Update the backend URL if you are not using the default host:
    - In `app/src/main/java/com/example/aitalkdemo/MainActivity.kt`, change `backendUrl` to your server (e.g., LAN IP or tunneled URL).
 4. (Optional) Adjust the available voices in `MainActivity.kt` to match your backend.
+5. If Gradle reports a missing Android SDK, copy `local.properties.example` to `local.properties` and set `sdk.dir` to your SDK install (Android Studio usually writes this automatically once an SDK is configured).
 
 ## 5) Run the Android app
 1. Start an emulator (or connect a device with USB debugging).
@@ -50,6 +51,11 @@ cd android
    - **Speak**: type text, pick a voice, and send to backend for TTS.
    - **Record**: tap to start/stop recording; audio uploads on stop.
 4. Watch `logcat` for networking and playback logs if troubleshooting.
+5. To run tests from the command line without downloading a new wrapper distribution, use the preinstalled `gradle` binary:
+   ```bash
+   gradle test                 # unit tests
+   gradle connectedAndroidTest # instrumentation (emulator/device + backend required)
+   ```
 
 ## 6) Customizing for your own app
 - Swap the gradient/colors/typography under `app/src/main/java/com/example/aitalkdemo/ui/theme/` to match your brand.
