@@ -1,14 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!--
-        Base application theme for the AI talk demo. While the app primarily
-        relies on Compose’s [AiTalkDemoTheme], this XML definition ensures a
-        consistent look on pre-Material3 views and when the activity first
-        launches before Compose is drawn. Avoid nested XML comments, which
-        can break resource parsing.
-    -->
     <style name="Theme.AiTalkDemo" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Primary brand colour. Used as a fallback for system UI elements -->
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryVariant">@color/gradient_start</item>
         <item name="colorSecondary">@color/gradient_end</item>
