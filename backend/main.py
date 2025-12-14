@@ -1,25 +1,77 @@
+import base64
 import logging
 import os
+import secrets
 import sys
 import tempfile
 import time
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
 import requests
 import whisper
 from dotenv import load_dotenv, set_key
-from fastapi import Body, FastAPI, File, Request, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi import Body, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 from huggingface_hub import InferenceClient
 
-# ------------------ Init ------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-logger = logging.getLogger(__name__)
 
+# ------------------ Logging ------------------
+LOG_DIR = Path(__file__).resolve().parent / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+LOG_FORMAT = "%(asctime)s [%(levelname)s] [%(request_id)s] %(message)s"
+
+
+class RequestIdFilter(logging.Filter):
+    """Ensures every record has a request_id attribute."""
+
+    def __init__(self, default_request_id: str = "backend") -> None:
+        super().__init__()
+        self.default_request_id = default_request_id
+
+    def filter(self, record: logging.LogRecord) -> bool:  # pragma: no cover - logging glue
+        if not hasattr(record, "request_id"):
+            record.request_id = self.default_request_id
+        return True
+
+
+def setup_logging() -> logging.Logger:
+    logger = logging.getLogger("aitalk")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    # Clear any default handlers from reloads
+    logger.handlers.clear()
+
+    formatter = logging.Formatter(LOG_FORMAT)
+    request_filter = RequestIdFilter()
+
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(formatter)
+    stream_handler.addFilter(request_filter)
+
+    file_handler = RotatingFileHandler(
+        LOG_DIR / "backend.log", maxBytes=1_000_000, backupCount=3
+    )
+    file_handler.setFormatter(formatter)
+    file_handler.addFilter(request_filter)
+
+    logger.addHandler(stream_handler)
+    logger.addHandler(file_handler)
+
+    return logger
+
+
+logger = setup_logging()
+
+
+def get_request_logger(request_id: str) -> logging.LoggerAdapter:
+    return logging.LoggerAdapter(logger, {"request_id": request_id})
+
+
+# ------------------ Env init ------------------
 ENV_PATH = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=ENV_PATH, override=False)
 
@@ -62,18 +114,40 @@ if not ELEVEN_KEY:
 
 # Hugging Face LLM (chat model)
 HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
-hf_client = InferenceClient(model=HF_MODEL, token=HF_TOKEN)
+
+
+# HF client cache
+_hf_client: InferenceClient | None = None
+
+
+def get_hf_client() -> InferenceClient | None:
+    global _hf_client
+    if _hf_client is not None:
+        return _hf_client
+
+    HF_ROUTER_URL = "https://router.huggingface.co"
+    USE_HF_ROUTER = True
+
+    try:
+        if USE_HF_ROUTER:
+            # Pass router URL as `model` (NOT base_url) to avoid conflicts.
+            _hf_client = InferenceClient(model=HF_ROUTER_URL, token=HF_TOKEN)
+        else:
+            _hf_client = InferenceClient(model=HF_MODEL, token=HF_TOKEN)
+        logger.info("HF client initialized (router=%s)", USE_HF_ROUTER)
+    except Exception:
+        logger.exception("Failed to initialize HF client")
+        _hf_client = None
+    return _hf_client
 
 # Whisper STT
 logger.info("Loading Whisper model 'tiny' for STT (Finnish)...")
 try:
-    # If you want better Finnish, change to "base" or "small" (slower but more accurate):
-    # whisper_model = whisper.load_model("base")
     whisper_model = whisper.load_model("tiny")
     logger.info("Whisper loaded")
-except Exception as exc:  # pragma: no cover - startup failure
+except Exception:  # pragma: no cover - startup failure
     logger.exception("Failed to load Whisper model")
-    raise RuntimeError("Whisper model failed to load") from exc
+    whisper_model = None
 
 app = FastAPI(title="Empathy Phone Mobile Backend")
 
@@ -81,51 +155,62 @@ app = FastAPI(title="Empathy Phone Mobile Backend")
 # ------------------ Helper functions ------------------
 
 
-def stt_local(path: str) -> str:
-    """Transcribe audio file to text using local Whisper."""
-    logger.info("Transcribing %s ...", path)
+def stt_local(request_logger: logging.LoggerAdapter, path: str) -> str:
+    if whisper_model is None:
+        raise HTTPException(
+            status_code=502,
+            detail="Whisper model not available (init failed). Check backend logs.",
+        )
+
+    request_logger.info("Transcribing file=%s", path)
     t0 = time.time()
     result = whisper_model.transcribe(path, language="fi")
     dt = time.time() - t0
     text = (result.get("text") or "").strip()
-    logger.info("STT text (%.1fs): %s", dt, text)
+    request_logger.info("STT done in %.2fs chars=%s", dt, len(text))
     return text
 
 
-def ask_llm(prompt: str) -> str:
-    """Call HF chat completion."""
-    logger.info("Asking LLM...")
+def ask_llm(request_logger: logging.LoggerAdapter, prompt: str) -> str:
+    client = get_hf_client()
+    if client is None:
+        raise HTTPException(
+            status_code=502,
+            detail="HF client not available (init failed). Check backend logs.",
+        )
+
+    request_logger.info("Calling LLM model=%s via router.huggingface.co", HF_MODEL)
     t0 = time.time()
-    response = hf_client.chat_completion(
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a warm, empathetic assistant. "
-                    "If user speaks Finnish, answer in Finnish. "
-                    "Otherwise answer in English. Keep replies short (1–3 sentences)."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=120,
-        temperature=0.7,
-    )
+    try:
+        response = client.chat_completion(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a warm, empathetic assistant. "
+                        "If user speaks Finnish, answer in Finnish. "
+                        "Otherwise answer in English. Keep replies short (1–3 sentences)."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=120,
+            temperature=0.7,
+        )
+    except Exception as err:  # pragma: no cover - upstream issues
+        request_logger.exception("LLM call failed")
+        raise HTTPException(status_code=502, detail=f"LLM provider error: {err}") from err
     dt = time.time() - t0
     answer = response.choices[0].message["content"]
-    logger.info("LLM reply (%.1fs): %s", dt, answer)
+    request_logger.info("LLM reply in %.2fs chars=%s", dt, len(answer))
     return answer
 
 
-def tts_elevenlabs(text: str, voice_id: str | None = None) -> bytes:
-    """Generate MP3 with ElevenLabs for given text.
-
-    :param voice_id: Optional voice ID override; defaults to VOICE_ID.
-    """
+def tts_elevenlabs(request_logger: logging.LoggerAdapter, text: str, voice_id: str | None = None) -> bytes:
     chosen_voice = voice_id or VOICE_ID
-    logger.info("Generating TTS with ElevenLabs...")
-    t0 = time.time()
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{chosen_voice}"
+    request_logger.info("Calling ElevenLabs voice=%s url=%s", chosen_voice, url)
+    t0 = time.time()
     headers = {
         "xi-api-key": ELEVEN_KEY or "",
         "Content-Type": "application/json",
@@ -139,11 +224,25 @@ def tts_elevenlabs(text: str, voice_id: str | None = None) -> bytes:
         },
     }
     response = requests.post(url, json=data, headers=headers, timeout=120)
-    logger.info("TTS status: %s", response.status_code)
-    response.raise_for_status()
+    request_logger.info("TTS status=%s", response.status_code)
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as http_err:  # pragma: no cover - depends on remote API
+        raise HTTPException(
+            status_code=response.status_code, detail=f"ElevenLabs error: {http_err}"
+        ) from http_err
     dt = time.time() - t0
-    logger.info("TTS done in %.1fs, bytes=%s", dt, len(response.content))
+    request_logger.info("TTS done in %.2fs bytes=%s", dt, len(response.content))
     return response.content  # MP3 bytes
+
+
+def read_body_text(payload: dict | None, key: str) -> Optional[str]:
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get(key)
+    if not isinstance(value, str):
+        return None
+    return value.strip() or None
 
 
 # ------------------ Routes ------------------
@@ -158,43 +257,51 @@ async def health():
 async def talk(
     request: Request,
     audio: UploadFile | None = File(default=None),
-    prompt: str | None = Body(default=None),
+    text: str | None = Body(default=None),
+    language: str | None = Body(default=None),
+    system_prompt: str | None = Body(default=None),
     voice: str | None = Body(default=None),
 ):
-    """Handle either audio uploads or raw text prompts.
+    """Handle either audio uploads or raw text prompts."""
 
-    Android sends microphone recording here as form-data (field name 'audio', file type
-    audio/mp4). When users type text instead, the app posts JSON `{ "prompt": "...",
-    "voice": "optional_voice_id" }`. We return MP3 bytes with the AI reply in both
-    cases.
-    """
+    request_id = secrets.token_hex(4)
+    log = get_request_logger(request_id)
+    request.state.request_id = request_id
     t0_all = time.time()
     tmp_path = None
 
-    try:
-        # Accept prompt/voice from JSON, multipart form, or explicit body parameters.
-        user_text: str | None = None
-        chosen_voice: str | None = None
+    content_type = request.headers.get("content-type", "").lower()
+    log.info("/talk start content-type=%s", content_type)
 
-        content_type = request.headers.get("content-type", "")
+    try:
+        user_text: str | None = None
+        chosen_voice: str | None = (voice or "").strip() or None
+        form_language: str | None = None
+        form_system_prompt: str | None = None
+
         if "application/json" in content_type:
             try:
                 payload = await request.json()
             except Exception:
                 payload = None
-            if isinstance(payload, dict):
-                user_text = (payload.get("prompt") or "").strip() or None
-                chosen_voice = (payload.get("voice") or "").strip() or None
+            user_text = read_body_text(payload, "text") or read_body_text(payload, "prompt")
+            chosen_voice = chosen_voice or read_body_text(payload, "voice")
+            form_language = read_body_text(payload, "language")
+            form_system_prompt = read_body_text(payload, "system_prompt")
         elif "multipart/form-data" in content_type:
             form = await request.form()
-            user_text = (form.get("prompt") or "").strip() or None
-            chosen_voice = (form.get("voice") or "").strip() or None
+            user_text = (form.get("text") or form.get("prompt") or "").strip() or None
+            chosen_voice = chosen_voice or (form.get("voice") or "").strip() or None
+            form_language = (form.get("language") or "").strip() or None
+            form_system_prompt = (form.get("system_prompt") or "").strip() or None
+        elif content_type:
+            log.warning("Unsupported content-type=%s", content_type)
+            raise HTTPException(status_code=415, detail="Unsupported content type")
 
-        # Body parameters as fallback (keeps compatibility with prior clients)
-        if user_text is None:
-            user_text = (prompt or "").strip() or None
-        if chosen_voice is None:
-            chosen_voice = (voice or "").strip() or None
+        if form_language:
+            log.info("language field provided=%s", form_language)
+        if form_system_prompt:
+            log.info("system_prompt provided (len=%s)", len(form_system_prompt))
 
         if audio is not None:
             suffix = os.path.splitext(audio.filename or "")[1] or ".m4a"
@@ -203,46 +310,72 @@ async def talk(
                 tmp.write(raw)
                 tmp_path = tmp.name
 
-            logger.info("Received file: %s, size=%s bytes", tmp_path, len(raw))
+            log.info("Received audio file=%s size=%sB", tmp_path, len(raw))
 
             if not user_text:
-                user_text = stt_local(tmp_path)
+                user_text = stt_local(log, tmp_path)
+        elif user_text is None:
+            user_text = (text or "").strip() or None
 
         if not user_text:
-            logger.warning(
-                "No prompt text supplied or detected from audio. Content-Type=%s", content_type
-            )
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": "Provide either text prompt or valid audio",
-                    "hint": "Send JSON {prompt, voice} or multipart/form-data with 'audio'",
-                },
-            )
+            log.warning("No prompt text supplied or detected from audio")
+            raise HTTPException(status_code=400, detail="Provide either text or audio input")
 
         # 2) LLM reply
-        reply_text = ask_llm(user_text)
+        reply_text = ask_llm(log, user_text)
 
         # 3) TTS
-        mp3_bytes = tts_elevenlabs(reply_text, voice_id=chosen_voice)
+        mp3_bytes = tts_elevenlabs(log, reply_text, voice_id=chosen_voice)
 
-        total = time.time() - t0_all
-        logger.info("/talk total time: %.1fs, MP3 bytes=%s", total, len(mp3_bytes))
+        total_time = time.time() - t0_all
+        audio_b64 = base64.b64encode(mp3_bytes).decode("ascii")
+        log.info(
+            "/talk success total=%.2fs reply_chars=%s audio_bytes=%s",
+            total_time,
+            len(reply_text),
+            len(mp3_bytes),
+        )
 
-        return Response(content=mp3_bytes, media_type="audio/mpeg")
+        return JSONResponse(
+            status_code=200,
+            content={
+                "request_id": request_id,
+                "text": reply_text,
+                "audio_base64": audio_b64,
+                "audio_format": "mp3",
+            },
+        )
 
+    except HTTPException as http_exc:
+        log.warning("/talk handled error status=%s detail=%s", http_exc.status_code, http_exc.detail)
+        raise http_exc
     except requests.HTTPError as http_err:
-        logger.exception("TTS HTTP error")
-        return JSONResponse(status_code=http_err.response.status_code, content={"error": str(http_err)})
+        status = getattr(http_err.response, "status_code", 502) or 502
+        log.exception("Upstream HTTP error")
+        raise HTTPException(status_code=status, detail=str(http_err)) from http_err
     except Exception as exc:  # pragma: no cover - catch-all for runtime issues
-        logger.exception("Error in /talk")
-        return JSONResponse(status_code=500, content={"error": str(exc)})
+        log.exception("Unexpected error in /talk")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
     finally:
         if tmp_path:
             try:
                 os.remove(tmp_path)
             except OSError:
-                logger.warning("Failed to delete temp file %s", tmp_path)
+                log.warning("Failed to delete temp file %s", tmp_path)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):  # pragma: no cover - routing glue
+    request_id = getattr(request.state, "request_id", secrets.token_hex(4))
+    log = get_request_logger(request_id)
+    log.warning(
+        "Returning HTTPException status=%s detail=%s path=%s",
+        exc.status_code,
+        exc.detail,
+        request.url.path,
+    )
+    content = {"error": exc.detail, "request_id": request_id}
+    return JSONResponse(status_code=exc.status_code, content=content)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual debugging
