@@ -20,9 +20,12 @@ cd android
    python -m venv .venv
    source .venv/bin/activate
    ```
-2. Install dependencies (the Whisper package is published as `openai-whisper`, already pinned in `requirements.txt`):
+2. Install dependencies (the Whisper package installs from GitHub under the canonical name `openai-whisper`; ensure `git` is available on your PATH):
    ```bash
    pip install --upgrade pip
+   # Pre-pinning build tools avoids `KeyError: '__version__'` on Windows when
+   # building the openai-whisper wheel from source.
+   pip install setuptools==68.2.2 wheel==0.41.3
    pip install -r requirements.txt
    ```
    If you hit PyTorch download issues on Linux CI, add `--extra-index-url https://download.pytorch.org/whl/cpu` to the install command.
@@ -53,7 +56,10 @@ cd android
    - **Record**: tap to start/stop recording; audio uploads on stop.
 4. Watch `logcat` for networking and playback logs if troubleshooting.
 5. To run tests from the command line without downloading a new wrapper distribution, start with the bundled helper (it skips
-   Android tests automatically if your SDK is not configured):
+   Android tests automatically if your SDK is not configured). If you need an SDK locally, run `./scripts/bootstrap_android_sdk.sh`
+   once; it installs platform-tools, platform 34, and build-tools 34.0.0 under `$HOME/android-sdk` by default. The helper falls
+   back to a GitHub mirror if Google downloads are blocked and will reuse a pre-downloaded command-line tools ZIP if you place it
+   in `$HOME/android-sdk/`. When it succeeds, it writes `local.properties` with the SDK path for you (overwriting if present):
    ```bash
    ./scripts/run_tests.sh
    ```
@@ -62,6 +68,7 @@ cd android
    gradle test                 # unit tests
    gradle connectedAndroidTest # instrumentation (emulator/device + backend required)
    ```
+   Unit tests stay local to the Android codebase; they do not require the backend to be running.
    For a fast backend sanity check (no external API calls), run:
    ```bash
    cd backend
@@ -80,6 +87,6 @@ cd android
 - **Recording errors**: verify microphone permission and that no other app holds exclusive audio focus.
 
 ## 8) Next steps
-- Add CI to run `./gradlew lint` or unit tests.
+- CI is configured in `.github/workflows/ci.yml` to run Android unit tests and a backend compile check on every push/PR.
 - Deploy the FastAPI backend to a cloud VM or container platform and update `backendUrl` accordingly.
 - Lock API keys with a secrets manager when publishing builds.

@@ -47,12 +47,15 @@ If you want a step-by-step walkthrough (including cloning, backend setup, and cu
 
 The included FastAPI backend accepts multipart audio uploads and returns MP3 audio replies after STT → LLM → TTS processing.
 
-1. Install dependencies (note: the Whisper dependency is published as `openai-whisper` and already pinned in `requirements.txt`):
+1. Install dependencies (note: the Whisper dependency is installed from GitHub under the canonical package name `openai-whisper`; ensure `git` is available on your PATH):
 
    ```bash
    cd backend
    python -m venv .venv
    source .venv/bin/activate
+   # Pre-pinning build tools avoids `KeyError: '__version__'` seen on Windows
+   # when building the openai-whisper wheel.
+   pip install --upgrade pip setuptools==68.2.2 wheel==0.41.3
    pip install -r requirements.txt
    ```
 
@@ -72,7 +75,7 @@ The included FastAPI backend accepts multipart audio uploads and returns MP3 aud
 
 ## Testing
 
-- Create a `local.properties` file pointing to your Android SDK (copy [`local.properties.example`](local.properties.example) and adjust `sdk.dir`). Android Studio writes this file automatically when an SDK is configured.
+- Create a `local.properties` file pointing to your Android SDK (copy [`local.properties.example`](local.properties.example) and adjust `sdk.dir`). Android Studio writes this file automatically when an SDK is configured. If you do not have an SDK yet, run `./scripts/bootstrap_android_sdk.sh` to download a minimal command-line install (platform 34/build-tools 34.0.0) under `$HOME/android-sdk` and re-run the tests. The helper falls back to a GitHub mirror if the Google download is blocked and will reuse a pre-downloaded ZIP placed in `$HOME/android-sdk/`.
 - Prefer the bundled test runner script for local checks; it avoids Gradle distribution downloads and skips Android tests if your SDK is missing:
   ```bash
   ./scripts/run_tests.sh
@@ -82,7 +85,7 @@ The included FastAPI backend accepts multipart audio uploads and returns MP3 aud
     ```bash
     gradle test
     ```
-    If the Gradle wrapper download is blocked in your environment, the preinstalled `gradle` command avoids fetching the distribution.
+    These unit tests do **not** call the backend; they only validate Android-side logic. If the Gradle wrapper download is blocked in your environment, the preinstalled `gradle` command avoids fetching the distribution.
   - Instrumentation tests on an emulator/device with the backend running (for end-to-end coverage):
     ```bash
     gradle connectedAndroidTest

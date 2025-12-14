@@ -4,9 +4,8 @@
         Base application theme for the AI talk demo. While the app primarily
         relies on Compose’s [AiTalkDemoTheme], this XML definition ensures a
         consistent look on pre-Material3 views and when the activity first
-        launches before Compose is drawn.
-        Note: Avoid nested comments or double-hyphen sequences ("--") in XML
-        comments, as they break resource parsing.
+        launches before Compose is drawn. Avoid nested XML comments, which
+        can break resource parsing.
     -->
     <style name="Theme.AiTalkDemo" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Primary brand colour. Used as a fallback for system UI elements -->
