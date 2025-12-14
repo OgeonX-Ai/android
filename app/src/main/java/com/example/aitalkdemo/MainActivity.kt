@@ -35,15 +35,12 @@ class MainActivity : ComponentActivity() {
     // MediaRecorder used for microphone capture
     private var recorder: MediaRecorder? = null
     // Compose state for whether we are currently recording
-    private var isProcessing by mutableStateOf(false)
-    // Temporary file for the recorded audio
-    private lateinit var audioFile: File
-
-    // OkHttp client with generous timeouts for Whisper + LLM + TTS pipeline
+    // Merge hint: keep only these single state declarations (drop any duplicates during conflict resolution).
     private var isRecording by mutableStateOf(false)
     private var isProcessing by mutableStateOf(false)
     private lateinit var audioFile: File
 
+    // OkHttp client with generous timeouts for Whisper + LLM + TTS pipeline
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
@@ -54,10 +51,7 @@ class MainActivity : ComponentActivity() {
      * Base URL of the FastAPI backend. You should point this to your own server.
      * For Android emulators, 10.0.2.2 maps to the host machine's localhost.
      */
-    private val backendUrl = "http://10.0.2.2:8000/talk"
-
-    /** List of example voices/personas. Replace with values supported by your API. */
-    private val availableVoices = listOf("Kim", "Milla", "John", "Lily")
+    // Merge hint: prefer this single backend URL; do not reintroduce alternate or duplicate declarations.
     private val backendUrl = "http://10.0.2.2:8000/talk"
 
     /** List of example voices/personas. Replace with values supported by your API. */
@@ -158,7 +152,7 @@ class MainActivity : ComponentActivity() {
                 )
                 .build()
             val request = Request.Builder()
-                .url(talkEndpointUrl)
+                .url(backendUrl)
                 .post(body)
                 .build()
             client.newCall(request).execute().use { response ->
@@ -197,7 +191,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         withProcessingIo {
-            val json = """{\"prompt\":\"$prompt\",\"voice\":\"$voice\"}"""
+            val json = """{"prompt":"$prompt","voice":"$voice"}"""
             val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
             val body = json.toRequestBody(mediaType)
             val request = Request.Builder()
@@ -211,39 +205,11 @@ class MainActivity : ComponentActivity() {
                     return@use
                 }
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use
-
-                val responseBytes = response.body?.bytes().orEmpty()
-                if (responseBytes.isEmpty()) return@use
-
-                val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
-                mp3File.writeBytes(responseBytes)
-
-                withContext(Dispatchers.Main) {
-                    playAudio(mp3File)
+                val responseBytes = response.body?.bytes()
+                if (responseBytes == null || responseBytes.isEmpty()) {
+                    Log.w(TAG, "Empty response body from backend")
+                    return@use
                 }
-            }
-        }
-    }
-
-    private fun sendTextToBackend(prompt: String, voice: String) {
-        if (prompt.isBlank() || voice.isBlank()) return
-
-        withProcessingIo {
-            val json = """{"prompt":"$prompt","voice":"$voice"}"""
-            val body = json.toRequestBody("application/json".toMediaTypeOrNull())
-
-            val request = Request.Builder()
-                .url(backendUrl)
-                .post(body)
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use
-
-                val responseBytes = response.body?.bytes().orEmpty()
-                if (responseBytes.isEmpty()) return@use
 
                 val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
                 mp3File.writeBytes(responseBytes)
@@ -290,6 +256,7 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        // Merge hint: keep this TAG definition; remove any stray TAG declarations from other branches.
         private const val TAG = "AiTalkDemo"
     }
 }
