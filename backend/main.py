@@ -54,6 +54,12 @@ def _ensure_env(name: str, prompt: str) -> Optional[str]:
 HF_TOKEN: Optional[str] = _ensure_env("HF_API_TOKEN", "Enter your Hugging Face token (HF_API_TOKEN)")
 ELEVEN_KEY: Optional[str] = _ensure_env("ELEVENLABS_API_KEY", "Enter your ElevenLabs API key (ELEVENLABS_API_KEY)")
 VOICE_ID: str = os.getenv("VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
+VOICE_ALIASES = {
+    "kim": os.getenv("VOICE_ID_KIM", VOICE_ID),
+    "milla": os.getenv("VOICE_ID_MILLA", VOICE_ID),
+    "john": os.getenv("VOICE_ID_JOHN", VOICE_ID),
+    "lily": os.getenv("VOICE_ID_LILY", VOICE_ID),
+}
 
 if not HF_TOKEN:
     logger.warning("HF_API_TOKEN missing; LLM calls will fail")
@@ -117,6 +123,34 @@ def ask_llm(prompt: str) -> str:
     return answer
 
 
+def _resolve_voice_id(voice_label: str | None) -> str:
+    """Return an ElevenLabs voice ID for a user-supplied label.
+
+    If the client provides a friendly name (e.g., "Kim"), use an alias mapping
+    so legacy Android builds continue working. When the client sends what looks
+    like a voice ID, pass it through unchanged. Otherwise, fall back to the
+    default VOICE_ID.
+    """
+
+    if not voice_label:
+        return VOICE_ID
+
+    normalized = voice_label.strip().lower()
+    if not normalized:
+        return VOICE_ID
+
+    if normalized in VOICE_ALIASES:
+        return VOICE_ALIASES[normalized]
+
+    # ElevenLabs voice IDs are typically 20+ characters and alphanumeric; allow
+    # passthrough for custom IDs without blocking shorter labels from falling
+    # back to the default.
+    if len(voice_label) >= 20:
+        return voice_label
+
+    return VOICE_ID
+
+
 def tts_elevenlabs(text: str, voice_id: str | None = None) -> bytes:
     """Generate MP3 with ElevenLabs for given text.
 
@@ -156,6 +190,7 @@ async def health():
 
 @app.post("/talk")
 async def talk(
+    request: Request,
     audio: UploadFile | None = File(default=None),
     prompt: str | None = Body(default=None),
     voice: str | None = Body(default=None),
@@ -204,17 +239,6 @@ async def talk(
 
             logger.info("Received file: %s, size=%s bytes", tmp_path, len(raw))
 
-        user_text: str | None = (prompt or "").strip() or None
-
-        if audio is not None:
-            suffix = os.path.splitext(audio.filename or "")[1] or ".m4a"
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                raw = await audio.read()
-                tmp.write(raw)
-                tmp_path = tmp.name
-
-            logger.info("Received file: %s, size=%s bytes", tmp_path, len(raw))
-
             if not user_text:
                 user_text = stt_local(tmp_path)
 
@@ -234,7 +258,7 @@ async def talk(
         reply_text = ask_llm(user_text)
 
         # 3) TTS
-        mp3_bytes = tts_elevenlabs(reply_text, voice_id=voice)
+        mp3_bytes = tts_elevenlabs(reply_text, voice_id=_resolve_voice_id(chosen_voice))
 
         total = time.time() - t0_all
         logger.info("/talk total time: %.1fs, MP3 bytes=%s", total, len(mp3_bytes))
