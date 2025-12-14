@@ -32,6 +32,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 class MainActivity : ComponentActivity() {
 
+    // MediaRecorder used for microphone capture
     private var recorder: MediaRecorder? = null
     private var isRecording by mutableStateOf(false)
     private var isProcessing by mutableStateOf(false)
@@ -47,6 +48,10 @@ class MainActivity : ComponentActivity() {
 
     private val voices = listOf("Kim", "Milla", "John", "Lily")
 
+    /** List of example voices/personas. Replace with values supported by your API. */
+    private val voices = listOf("Kim", "Milla", "John", "Lily")
+
+    // Permission launcher for microphone access
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (!granted) {
@@ -72,6 +77,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Request microphone permission if not already granted. */
     private fun requestMicPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
@@ -82,7 +88,7 @@ class MainActivity : ComponentActivity() {
 
     private fun startRecording() {
         if (isRecording) return
-
+        // Create a temp file in the app's internal files directory
         audioFile = File(filesDir, "recording_${System.currentTimeMillis()}.m4a")
         recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(this)
@@ -112,9 +118,11 @@ class MainActivity : ComponentActivity() {
     private fun stopRecordingAndSend() {
         if (!isRecording) return
         isRecording = false
-
         try {
             recorder?.stop()
+        } catch (e: RuntimeException) {
+            // Handle case where stop is called prematurely
+            Log.e(TAG, "Error stopping recorder", e)
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping recorder", e)
         } finally {
@@ -137,11 +145,59 @@ class MainActivity : ComponentActivity() {
                     file.asRequestBody("audio/mp4".toMediaTypeOrNull())
                 )
                 .build()
-
             val request = Request.Builder()
                 .url(backendUrl)
                 .post(body)
                 .build()
+            client.newCall(request).execute().use { response ->
+                Log.d(TAG, "Backend response code: ${response.code}")
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Backend error: ${response.code} ${response.message}")
+                    return@use
+                }
+
+                val responseBytes = response.body?.bytes()
+                if (responseBytes == null || responseBytes.isEmpty()) {
+                    Log.w(TAG, "Empty response body from backend")
+                    return@use
+                }
+
+                val mp3File = File(filesDir, "reply_${System.currentTimeMillis()}.mp3")
+                mp3File.writeBytes(responseBytes)
+                withContext(Dispatchers.Main) {
+                    playAudio(mp3File)
+                }
+            }
+        }
+    }
+
+    /**
+     * Sends a text prompt and selected voice to the backend. The API is expected to
+     * return an MP3 file containing synthesized speech. Adjust the JSON payload
+     * according to your API’s contract.
+     *
+     * @param prompt the text that should be spoken
+     * @param voice the voice or persona name to use
+     */
+    private fun sendTextToBackend(prompt: String, voice: String) {
+        if (prompt.isBlank() || voice.isBlank()) {
+            Log.w(TAG, "Skipping TTS request because prompt or voice is blank")
+            return
+        }
+        withProcessingIo {
+            val json = """{\"prompt\":\"$prompt\",\"voice\":\"$voice\"}"""
+            val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
+            val body = json.toRequestBody(mediaType)
+            val request = Request.Builder()
+                .url(backendUrl)
+                .post(body)
+                .build()
+            client.newCall(request).execute().use { response ->
+                Log.d(TAG, "Backend response code: ${response.code}")
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Backend error: ${response.code} ${response.message}")
+                    return@use
+                }
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use
