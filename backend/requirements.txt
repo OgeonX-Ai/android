@@ -1,0 +1,7 @@
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+python-dotenv==1.0.1
+# Use the published package name to avoid pip resolving errors on Windows.
+openai-whisper==20231117
+requests==2.31.0
+huggingface-hub==0.23.5
