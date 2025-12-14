@@ -1,0 +1,4 @@
+# Example Android SDK path configuration for local builds and tests.
+# Copy this file to `local.properties` and update the path to match your machine.
+# On macOS the default SDK is often under $HOME/Library/Android/sdk; on Linux it is commonly $HOME/Android/Sdk.
+sdk.dir=/absolute/path/to/your/Android/Sdk
