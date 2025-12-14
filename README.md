@@ -53,6 +53,9 @@ The included FastAPI backend accepts multipart audio uploads and returns MP3 aud
    cd backend
    python -m venv .venv
    source .venv/bin/activate
+   # Pre-pinning build tools avoids `KeyError: '__version__'` seen on Windows
+   # when building the openai-whisper wheel.
+   pip install --upgrade pip setuptools==68.2.2 wheel==0.41.3
    pip install -r requirements.txt
    ```
 
