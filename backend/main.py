@@ -68,7 +68,6 @@ hf_client = InferenceClient(
     model=HF_MODEL,
     token=HF_TOKEN,
     timeout=HF_TIMEOUT,
-    base_url="https://router.huggingface.co",
 )
 
 DEFAULT_EMPTY_TRANSCRIPT_REPLY = "En kuullut kunnolla. Voisitko yrittää uudelleen?"
