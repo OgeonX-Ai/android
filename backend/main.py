@@ -7,9 +7,8 @@ from pathlib import Path
 from typing import Optional
 
 import requests
-import whisper
 from dotenv import load_dotenv, set_key
-from fastapi import Body, FastAPI, File, UploadFile
+from fastapi import FastAPI, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from huggingface_hub import InferenceClient
 
@@ -65,15 +64,30 @@ HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
 hf_client = InferenceClient(model=HF_MODEL, token=HF_TOKEN)
 
 # Whisper STT
-logger.info("Loading Whisper model 'tiny' for STT (Finnish)...")
-try:
-    # If you want better Finnish, change to "base" or "small" (slower but more accurate):
-    # whisper_model = whisper.load_model("base")
-    whisper_model = whisper.load_model("tiny")
-    logger.info("Whisper loaded")
-except Exception as exc:  # pragma: no cover - startup failure
-    logger.exception("Failed to load Whisper model")
-    raise RuntimeError("Whisper model failed to load") from exc
+whisper_model = None
+
+
+def load_whisper_model():
+    """Lazy-load and cache the Whisper model for STT."""
+
+    global whisper_model
+
+    if whisper_model is not None:
+        return whisper_model
+
+    import whisper
+
+    logger.info("Loading Whisper model 'tiny' for STT (Finnish)...")
+    try:
+        # If you want better Finnish, change to "base" or "small" (slower but more accurate):
+        # whisper_model = whisper.load_model("base")
+        whisper_model = whisper.load_model("tiny")
+        logger.info("Whisper loaded")
+    except Exception as exc:  # pragma: no cover - startup failure
+        logger.exception("Failed to load Whisper model")
+        raise RuntimeError("Whisper model failed to load") from exc
+
+    return whisper_model
 
 app = FastAPI(title="Empathy Phone Mobile Backend")
 
@@ -85,7 +99,8 @@ def stt_local(path: str) -> str:
     """Transcribe audio file to text using local Whisper."""
     logger.info("Transcribing %s ...", path)
     t0 = time.time()
-    result = whisper_model.transcribe(path, language="fi")
+    model = load_whisper_model()
+    result = model.transcribe(path, language="fi")
     dt = time.time() - t0
     text = (result.get("text") or "").strip()
     logger.info("STT text (%.1fs): %s", dt, text)
@@ -155,11 +170,7 @@ async def health():
 
 
 @app.post("/talk")
-async def talk(
-    audio: UploadFile | None = File(default=None),
-    prompt: str | None = Body(default=None),
-    voice: str | None = Body(default=None),
-):
+async def talk(http_request: Request):
     """Handle either audio uploads or raw text prompts.
 
     Android sends microphone recording here as form-data (field name 'audio', file type
@@ -171,12 +182,37 @@ async def talk(
     tmp_path = None
 
     try:
-        user_text: str | None = (prompt or "").strip() or None
+        content_type = http_request.headers.get("content-type", "").lower()
+        user_text: str | None = None
+        voice: str | None = None
+        audio_file: UploadFile | None = None
 
-        if audio is not None:
-            suffix = os.path.splitext(audio.filename or "")[1] or ".m4a"
+        if content_type.startswith("application/json"):
+            try:
+                payload = await http_request.json()
+            except Exception:
+                return JSONResponse(status_code=400, content={"error": "Invalid JSON payload"})
+
+            if isinstance(payload, dict):
+                user_text = (str(payload.get("prompt") or "").strip() or None)
+                voice = (str(payload.get("voice") or "").strip() or None)
+            else:
+                return JSONResponse(status_code=400, content={"error": "Invalid JSON payload"})
+        elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+            form = await http_request.form()
+            audio_file = form.get("audio") if isinstance(form, dict) else None
+            if audio_file is not None and not isinstance(audio_file, UploadFile):
+                audio_file = None
+
+            user_text = (str(form.get("prompt") or "").strip() or None) if form else None
+            voice = (str(form.get("voice") or "").strip() or None) if form else None
+        else:
+            return JSONResponse(status_code=415, content={"error": "Unsupported content type"})
+
+        if audio_file is not None:
+            suffix = os.path.splitext(audio_file.filename or "")[1] or ".m4a"
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                raw = await audio.read()
+                raw = await audio_file.read()
                 tmp.write(raw)
                 tmp_path = tmp.name
 
