@@ -64,7 +64,14 @@ if not ELEVEN_KEY:
 
 # Hugging Face LLM (chat model)
 HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
-hf_client = InferenceClient(model=HF_MODEL, token=HF_TOKEN, timeout=HF_TIMEOUT)
+hf_client = InferenceClient(
+    model=HF_MODEL,
+    token=HF_TOKEN,
+    timeout=HF_TIMEOUT,
+    base_url="https://router.huggingface.co",
+)
+
+DEFAULT_EMPTY_TRANSCRIPT_REPLY = "En kuullut kunnolla. Voisitko yrittää uudelleen?"
 
 # Whisper STT
 whisper_model = None
@@ -225,23 +232,20 @@ async def talk(request: Request):
             if not user_text:
                 user_text = stt_local(tmp_path)
 
-        if not user_text:
-            logger.warning("No prompt text supplied or detected from audio")
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Provide either text prompt or valid audio"},
-            )
-
-        if not HF_TOKEN:
-            logger.error("HF_API_TOKEN missing; cannot process LLM prompts")
-            return JSONResponse(status_code=503, content={"error": "LLM unavailable: missing HF_API_TOKEN"})
-
-        # 2) LLM reply
-        reply_text = ask_llm(user_text)
-
         if not ELEVEN_KEY:
             logger.error("ELEVENLABS_API_KEY missing; cannot generate TTS")
             return JSONResponse(status_code=503, content={"error": "TTS unavailable: missing ELEVENLABS_API_KEY"})
+
+        if not user_text:
+            logger.warning("No prompt text supplied or detected from audio; using fallback reply")
+            reply_text = DEFAULT_EMPTY_TRANSCRIPT_REPLY
+        else:
+            if not HF_TOKEN:
+                logger.error("HF_API_TOKEN missing; cannot process LLM prompts")
+                return JSONResponse(status_code=503, content={"error": "LLM unavailable: missing HF_API_TOKEN"})
+
+            # 2) LLM reply
+            reply_text = ask_llm(user_text)
 
         # 3) TTS
         mp3_bytes = tts_elevenlabs(reply_text, voice_id=voice)
@@ -285,3 +289,4 @@ if __name__ == "__main__":  # pragma: no cover - manual debugging
     import uvicorn
 
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
