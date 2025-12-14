@@ -114,31 +114,9 @@ if not ELEVEN_KEY:
 
 # Hugging Face LLM (chat model)
 HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
-
-
-# HF client cache
-_hf_client: InferenceClient | None = None
-
-
-def get_hf_client() -> InferenceClient | None:
-    global _hf_client
-    if _hf_client is not None:
-        return _hf_client
-
-    HF_ROUTER_URL = "https://router.huggingface.co"
-    USE_HF_ROUTER = True
-
-    try:
-        if USE_HF_ROUTER:
-            # Pass router URL as `model` (NOT base_url) to avoid conflicts.
-            _hf_client = InferenceClient(model=HF_ROUTER_URL, token=HF_TOKEN)
-        else:
-            _hf_client = InferenceClient(model=HF_MODEL, token=HF_TOKEN)
-        logger.info("HF client initialized (router=%s)", USE_HF_ROUTER)
-    except Exception:
-        logger.exception("Failed to initialize HF client")
-        _hf_client = None
-    return _hf_client
+hf_client = InferenceClient(
+    model=HF_MODEL, token=HF_TOKEN, base_url="https://router.huggingface.co"
+)
 
 # Whisper STT
 logger.info("Loading Whisper model 'tiny' for STT (Finnish)...")
@@ -156,12 +134,6 @@ app = FastAPI(title="Empathy Phone Mobile Backend")
 
 
 def stt_local(request_logger: logging.LoggerAdapter, path: str) -> str:
-    if whisper_model is None:
-        raise HTTPException(
-            status_code=502,
-            detail="Whisper model not available (init failed). Check backend logs.",
-        )
-
     request_logger.info("Transcribing file=%s", path)
     t0 = time.time()
     result = whisper_model.transcribe(path, language="fi")
@@ -172,13 +144,6 @@ def stt_local(request_logger: logging.LoggerAdapter, path: str) -> str:
 
 
 def ask_llm(request_logger: logging.LoggerAdapter, prompt: str) -> str:
-    client = get_hf_client()
-    if client is None:
-        raise HTTPException(
-            status_code=502,
-            detail="HF client not available (init failed). Check backend logs.",
-        )
-
     request_logger.info("Calling LLM model=%s via router.huggingface.co", HF_MODEL)
     t0 = time.time()
     try:
